@@ -50,6 +50,7 @@ xcodebuild \
   -configuration Release \
   -sdk iphoneos \
   -derivedDataPath DerivedData \
+  -clonedSourcePackagesDirPath "$HOME/Library/Caches/sing-box-source-packages" \
   build \
   STRIP_INSTALLED_PRODUCT=NO \
   ARCHS=arm64 \

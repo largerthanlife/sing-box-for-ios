@@ -72,6 +72,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ^1.25
+          cache: false  # Go 项目 clone 在 $HOME，setup-go 找不到 go.sum；统一用下面的 cache
 
       - name: Setup Xcode stable
         run: |-
@@ -81,6 +82,19 @@ jobs:
       - name: Install ldid (via brew)
         run: |
           brew install ldid
+
+      # runner 每次全新：恢复上次构建的 Go module/build 缓存与 SwiftPM checkout
+      - name: Cache Go and Swift packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/Library/Caches/go-build
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Caches/sing-box-source-packages
+          key: ${{ runner.os }}-buildcache-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-buildcache-
 
       - name: Build TIPA
         run: |
