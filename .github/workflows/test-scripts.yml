@@ -22,3 +22,6 @@ jobs:
 
       - name: Run resolve-source tests
         run: bash scripts/test-resolve-source.sh
+
+      - name: Run prepare-source integration tests
+        run: bash scripts/test-prepare-source.sh
