@@ -27,7 +27,7 @@ Actions → **Build sing-box-for-ios** → Run workflow：
 |---|---|---|
 | `tag_name` | 发布版本号（release tag 与 `.tipa` 文件名），例 `1.14.0-beta.8-custom.1` | 必填 |
 | `sing_box_repo` | sing-box 源码仓库 | `largerthanlife/sing-box` |
-| `sing_box_ref` | 分支或 tag，例 `testing`；留空则使用 `v<tag_name>` | 空 |
+| `sing_box_ref` | 分支或 tag，例 `testing`；留空则使用 `v<tag_name>`。**注意 `tag_name` 只决定产物/release 名字，不会替你选源码**——想编哪个分支/tag 就在此填哪个 | 空 |
 | `upstream_tag` | 可选：clone 后合入的上游 tag，例 `v1.14.0-beta.9` | 空 |
 | `prerelease` | 是否发布为测试版 | `false` |
 | `update_apple` | 是否用 sing-box-for-apple 最新 main 替换 submodule 指定的客户端（构建 beta 版本如遇 Swift 编译错误，选 `true`） | `false` |
