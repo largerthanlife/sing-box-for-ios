@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# resolve-source.sh <sing_box_repo> <sing_box_ref> <tag_name>
+# resolve-source.sh <sing_box_repo> <sing_box_ref> <tag_name> [merge_tag]
 #
-# 解析本次构建使用的 sing-box 源码来源，导出两个变量：
-#   SB_REPO  GitHub 仓库 (owner/repo)，默认 SagerNet/sing-box
-#   SB_REF   要 clone 的分支或 tag；留空时回退为 v<tag_name>
+# 解析本次构建使用的 sing-box 源码来源，导出三个变量：
+#   SB_REPO    GitHub 仓库 (owner/repo)，默认 largerthanlife/sing-box
+#   SB_REF     要 clone 的分支或 tag；留空时回退为 v<tag_name>
+#   MERGE_TAG  (可选) clone 后要合入的上游 tag，例 v1.14.0-beta.9
 set -euo pipefail
 
-SB_REPO="${1:-SagerNet/sing-box}"
+SB_REPO="${1:-largerthanlife/sing-box}"
 SB_REF="${2:-}"
 TAG_NAME="${3:-}"
+MERGE_TAG="${4:-}"
 
 if [[ ! "$SB_REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
   echo "invalid sing_box_repo: '${SB_REPO}' (expect owner/repo)" >&2
@@ -23,5 +25,10 @@ if [ -z "$SB_REF" ]; then
   SB_REF="v${TAG_NAME}"
 fi
 
-export SB_REPO SB_REF
-echo "resolved sing-box source: ${SB_REPO}@${SB_REF}"
+if [ -n "$MERGE_TAG" ] && [[ ! "$MERGE_TAG" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+  echo "invalid merge tag: '${MERGE_TAG}'" >&2
+  exit 1
+fi
+
+export SB_REPO SB_REF MERGE_TAG
+echo "resolved sing-box source: ${SB_REPO}@${SB_REF}${MERGE_TAG:+ (merge ${MERGE_TAG})}"

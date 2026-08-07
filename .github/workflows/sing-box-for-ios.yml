@@ -8,12 +8,17 @@ on:
         required: true
         type: string
       sing_box_repo:
-        description: 'sing-box 源码仓库 (owner/repo)，可填自己的 fork'
+        description: 'sing-box 源码仓库 (owner/repo)'
         required: false
-        default: 'SagerNet/sing-box'
+        default: 'largerthanlife/sing-box'
         type: string
       sing_box_ref:
         description: 'sing-box 分支或 tag (留空则使用 v<版本号>)'
+        required: false
+        default: ''
+        type: string
+      upstream_tag:
+        description: '可选: clone 后合入的上游 tag (例 v1.14.0-beta.9)，用于在自定义分支上叠加最新上游版本'
         required: false
         default: ''
         type: string
@@ -80,127 +85,24 @@ jobs:
         if: ${{ inputs.run_build == 'true' }}
         run: |
           set -euo pipefail
-
-          cd $HOME
-
-          echo "sing-box-v${{ inputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
-          source "${GITHUB_WORKSPACE}/scripts/resolve-source.sh" "${{ inputs.sing_box_repo }}" "${{ inputs.sing_box_ref }}" "${{ inputs.tag_name }}"
-          echo "sing-box source: ${SB_REPO}@${SB_REF}" >> $GITHUB_STEP_SUMMARY
-          # 不用 --depth 1：libbox 通过 git describe --tags 内嵌版本号，需要完整 tag 历史
-          git clone -b "${SB_REF}" --recurse-submodules --filter=blob:none "https://github.com/${SB_REPO}.git" sing-box
-
-          if [ "${{ inputs.update_apple }}" = "true" ]; then
-            rm -rf sing-box/clients/apple
-            git clone --recurse-submodules --depth 1 https://github.com/SagerNet/sing-box-for-apple.git sing-box/clients/apple
-          fi
-
-          export XCODEPROJ_NAME=sing-box
-          export APPLICATION_NAME=sing-box
-          export SCHEME_NAME=SFI
-
-          cd $HOME/sing-box
-          echo "embedded version: $(git describe --tags)" >> $GITHUB_STEP_SUMMARY
-
-          make lib_install
-          export PATH="$PATH:$(go env GOPATH)/bin"
-          go run ./cmd/internal/build_libbox -target apple -platform ios
-          mv Libbox.xcframework clients/apple
-
-          cd clients/apple
-
-          xcodebuild \
-            -project $XCODEPROJ_NAME.xcodeproj \
-            -scheme $SCHEME_NAME \
-            -destination 'generic/platform=iOS' \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath DerivedData \
-            build \
-            STRIP_INSTALLED_PRODUCT=NO \
-            ARCHS=arm64 \
-            ONLY_ACTIVE_ARCH=YES \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            SWIFT_SERIALIZE_DEBUGGING_OPTIONS=NO
-
-          APP_PATH="DerivedData/Build/Products/Release-iphoneos/$APPLICATION_NAME.app"
-          ldid -SSFI/SFI.entitlements "$APP_PATH/$APPLICATION_NAME"
-          ldid -SExtension/Extension.entitlements "$APP_PATH/PlugIns/Extension.appex/Extension"
-          ldid -SIntentsExtension/IntentsExtension.entitlements "$APP_PATH/Extensions/IntentsExtension.appex/IntentsExtension"
-
-          mkdir -p packages/Payload
-          cp -rp "$APP_PATH" packages/Payload
-          cd packages
-          zip -qr $APPLICATION_NAME.tipa Payload
-          mv $APPLICATION_NAME.tipa ${GITHUB_WORKSPACE}/${APPLICATION_NAME}-${{ inputs.tag_name }}.tipa
-          cd ${GITHUB_WORKSPACE}
-          echo -e "SHA256 Checksum: \n$(sha256sum ${APPLICATION_NAME}-${{ inputs.tag_name }}.tipa)" >> $GITHUB_STEP_SUMMARY
-
-          rm -rf DerivedData
-          rm -rf ~/sing-box
+          source "${GITHUB_WORKSPACE}/scripts/resolve-source.sh" "${{ inputs.sing_box_repo }}" "${{ inputs.sing_box_ref }}" "${{ inputs.tag_name }}" "${{ inputs.upstream_tag }}"
+          export TAG_NAME="${{ inputs.tag_name }}"
+          export UPDATE_APPLE="${{ inputs.update_apple }}"
+          bash "${GITHUB_WORKSPACE}/scripts/build-tipa.sh"
 
       - name: Build TIPA reF1nd
         if: ${{ inputs.run_build_reF1nd == 'true' }}
         run: |
           set -euo pipefail
-
-          cd $HOME
-
-          echo "sing-box-reF1nd-v${{ inputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
-          git clone -b v${{ inputs.tag_name }}-reF1nd --recurse-submodules --depth 1 https://github.com/reF1nd/sing-box.git
-
-          if [ "${{ inputs.update_apple }}" = "true" ]; then
-            rm -rf sing-box/clients/apple
-            git clone --recurse-submodules --depth 1 https://github.com/SagerNet/sing-box-for-apple.git sing-box/clients/apple
-          fi
-
-          export XCODEPROJ_NAME=sing-box
-          export APPLICATION_NAME=sing-box
-          export SCHEME_NAME=SFI
-
-          cd $HOME/sing-box
-
-          make lib_install
-          export PATH="$PATH:$(go env GOPATH)/bin"
-          go run ./cmd/internal/build_libbox -target apple -platform ios
-          mv Libbox.xcframework clients/apple
-
-          cd clients/apple
-
-          xcodebuild \
-            -project $XCODEPROJ_NAME.xcodeproj \
-            -scheme $SCHEME_NAME \
-            -destination 'generic/platform=iOS' \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath DerivedData \
-            build \
-            STRIP_INSTALLED_PRODUCT=NO \
-            ARCHS=arm64 \
-            ONLY_ACTIVE_ARCH=YES \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            SWIFT_SERIALIZE_DEBUGGING_OPTIONS=NO \
-            INFOPLIST_KEY_CFBundleDisplayName="${APPLICATION_NAME}-reF1nd" \
-            PRODUCT_BUNDLE_IDENTIFIER="io.nekohasekai.sfavt-reF1nd"
-
-          APP_PATH="DerivedData/Build/Products/Release-iphoneos/$APPLICATION_NAME.app"
-          ldid -SSFI/SFI.entitlements "$APP_PATH/$APPLICATION_NAME"
-          ldid -SExtension/Extension.entitlements "$APP_PATH/PlugIns/Extension.appex/Extension"
-          ldid -SIntentsExtension/IntentsExtension.entitlements "$APP_PATH/Extensions/IntentsExtension.appex/IntentsExtension"
-
-          mkdir -p packages/Payload
-          cp -rp "$APP_PATH" packages/Payload
-          cd packages
-          zip -qr $APPLICATION_NAME.tipa Payload
-          mv $APPLICATION_NAME.tipa ${GITHUB_WORKSPACE}/${APPLICATION_NAME}-reF1nd-${{ inputs.tag_name }}.tipa
-          cd ${GITHUB_WORKSPACE}
-          echo -e "SHA256 Checksum: \n$(sha256sum ${APPLICATION_NAME}-reF1nd-${{ inputs.tag_name }}.tipa)" >> $GITHUB_STEP_SUMMARY
-
-          rm -rf DerivedData
-          rm -rf ~/sing-box
+          export SB_REPO="reF1nd/sing-box"
+          export SB_REF="v${{ inputs.tag_name }}-reF1nd"
+          export TAG_NAME="${{ inputs.tag_name }}"
+          export UPDATE_APPLE="${{ inputs.update_apple }}"
+          export BUILD_LABEL="sing-box-reF1nd"
+          export DISPLAY_SUFFIX="-reF1nd"
+          export BUNDLE_ID="io.nekohasekai.sfavt-reF1nd"
+          export OUTPUT_NAME="sing-box-reF1nd-${{ inputs.tag_name }}.tipa"
+          bash "${GITHUB_WORKSPACE}/scripts/build-tipa.sh"
 
       - name: Create Release and Upload TIPA
         uses: softprops/action-gh-release@v3
