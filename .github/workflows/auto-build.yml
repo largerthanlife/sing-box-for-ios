@@ -89,6 +89,9 @@ jobs:
           export SB_REF="${{ inputs.source_branch || 'testing' }}"
           export MERGE_TAG="v${{ needs.check.outputs.tag }}"
           export TAG_NAME="${{ needs.check.outputs.tag }}"
+          # 上游发版时 clients/apple 的 submodule 指针可能滞后于 libbox API（见过 beta.8 编不过），
+          # 始终改用 sing-box-for-apple 最新 main
+          export UPDATE_APPLE="true"
           bash "${GITHUB_WORKSPACE}/scripts/build-tipa.sh"
 
       - name: Create Release and Upload TIPA
