@@ -7,6 +7,16 @@ on:
         description: '输入版本号 (例：1.12.0)'
         required: true
         type: string
+      sing_box_repo:
+        description: 'sing-box 源码仓库 (owner/repo)，可填自己的 fork'
+        required: false
+        default: 'SagerNet/sing-box'
+        type: string
+      sing_box_ref:
+        description: 'sing-box 分支或 tag (留空则使用 v<版本号>)'
+        required: false
+        default: ''
+        type: string
       prerelease:
         description: '是否发布为测试版? (true/false)'
         required: false
@@ -74,7 +84,10 @@ jobs:
           cd $HOME
 
           echo "sing-box-v${{ inputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
-          git clone -b v${{ inputs.tag_name }} --recurse-submodules --depth 1 https://github.com/SagerNet/sing-box.git
+          source "${GITHUB_WORKSPACE}/scripts/resolve-source.sh" "${{ inputs.sing_box_repo }}" "${{ inputs.sing_box_ref }}" "${{ inputs.tag_name }}"
+          echo "sing-box source: ${SB_REPO}@${SB_REF}" >> $GITHUB_STEP_SUMMARY
+          # 不用 --depth 1：libbox 通过 git describe --tags 内嵌版本号，需要完整 tag 历史
+          git clone -b "${SB_REF}" --recurse-submodules --filter=blob:none "https://github.com/${SB_REPO}.git" sing-box
 
           if [ "${{ inputs.update_apple }}" = "true" ]; then
             rm -rf sing-box/clients/apple
@@ -86,6 +99,7 @@ jobs:
           export SCHEME_NAME=SFI
 
           cd $HOME/sing-box
+          echo "embedded version: $(git describe --tags)" >> $GITHUB_STEP_SUMMARY
 
           make lib_install
           export PATH="$PATH:$(go env GOPATH)/bin"
