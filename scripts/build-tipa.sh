@@ -20,32 +20,12 @@ SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
 APPLICATION_NAME=sing-box
 OUTPUT_NAME="${OUTPUT_NAME:-${APPLICATION_NAME}-${TAG_NAME}.tipa}"
 
-cd "$HOME"
-rm -rf sing-box
-
 echo "${BUILD_LABEL:-sing-box}-v${TAG_NAME}" >> "$SUMMARY"
 echo "sing-box source: ${SB_REPO}@${SB_REF}" >> "$SUMMARY"
-# 不用 --depth 1：libbox 通过 git describe --tags 内嵌版本号，需要完整 tag 历史
-git clone -b "${SB_REF}" --recurse-submodules --filter=blob:none "https://github.com/${SB_REPO}.git" sing-box
 
-if [ "${UPDATE_APPLE:-false}" = "true" ]; then
-  rm -rf sing-box/clients/apple
-  git clone --recurse-submodules --depth 1 https://github.com/SagerNet/sing-box-for-apple.git sing-box/clients/apple
-fi
-
-cd "$HOME/sing-box"
-
-if [ -n "${MERGE_TAG:-}" ]; then
-  git config user.name "github-actions[bot]"
-  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-  git remote add upstream "https://github.com/${UPSTREAM_REPO:-SagerNet/sing-box}.git"
-  git fetch upstream "refs/tags/${MERGE_TAG}:refs/tags/${MERGE_TAG}"
-  git merge --no-edit "${MERGE_TAG}"
-  # 上游 tag 可能更新了 clients/apple 的 submodule 指针
-  git submodule update --init --recursive
-  echo "merged upstream ${MERGE_TAG}" >> "$SUMMARY"
-fi
-
+bash "$(dirname "$0")/prepare-source.sh"
+cd "${PREPARE_DIR:-$HOME/sing-box}"
+[ -z "${MERGE_TAG:-}" ] || echo "merged upstream ${MERGE_TAG}" >> "$SUMMARY"
 echo "embedded version: $(git describe --tags)" >> "$SUMMARY"
 
 make lib_install
