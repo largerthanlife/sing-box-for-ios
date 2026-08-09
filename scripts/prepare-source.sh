@@ -29,7 +29,12 @@ if [ -n "${MERGE_TAG:-}" ]; then
   git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
   git remote add upstream "https://github.com/${UPSTREAM_REPO:-SagerNet/sing-box}.git"
   git fetch upstream "refs/tags/${MERGE_TAG}:refs/tags/${MERGE_TAG}"
-  git merge --no-edit "${MERGE_TAG}"
+  # 上游 testing 会被 rebase/force-push（beta.10 即改写了历史，普通 merge
+  # 出现大面积 add/add 冲突）。-X theirs：冲突 hunk 一律取上游。
+  # 约定：本 fork 的自有改动以新增文件为主（不受冲突影响）；对上游已有
+  # 文件的自有修改在冲突时会被上游版本覆盖（如 option enum 的展示项，
+  # 方法注册走 init() 不受影响）。
+  git merge -X theirs --no-edit "${MERGE_TAG}"
   git submodule update --init --recursive
 fi
 
