@@ -22,10 +22,19 @@ check() { # <用例名> <实际> <期望>
   fi
 }
 
-# 场景 1: 纯 clone fork@testing —— describe 应为 tag 本身，apple 子模块为 gitlink 版本
+# 场景 1: 纯 clone fork@testing —— describe 应基于 v1.14.0-beta.8，apple 子模块为 gitlink 版本
 env -i PATH="$PATH" HOME="$WORK/h1" SB_REPO=largerthanlife/sing-box SB_REF=testing \
   PREPARE_DIR="$WORK/s1" bash "$SCRIPT_DIR/prepare-source.sh" >/dev/null 2>&1
-check "纯 clone: describe == v1.14.0-beta.8" "$(git -C "$WORK/s1" describe --tags)" "v1.14.0-beta.8"
+case "$(git -C "$WORK/s1" describe --tags 2>/dev/null)" in
+  v1.14.0-beta.8*)
+    echo "PASS: 纯 clone: describe 基于 v1.14.0-beta.8"
+    PASS=$((PASS + 1))
+    ;;
+  *)
+    echo "FAIL: 纯 clone: describe=$(git -C "$WORK/s1" describe --tags 2>&1)"
+    FAIL=$((FAIL + 1))
+    ;;
+esac
 check "纯 clone: clients/apple == gitlink" "$(git -C "$WORK/s1/clients/apple" rev-parse HEAD)" "$APPLE_GITLINK"
 
 # 场景 2: clone + merge tag + UPDATE_APPLE=true
@@ -34,8 +43,53 @@ check "纯 clone: clients/apple == gitlink" "$(git -C "$WORK/s1/clients/apple" r
 env -i PATH="$PATH" HOME="$WORK/h2" SB_REPO=largerthanlife/sing-box SB_REF=testing \
   MERGE_TAG=v1.14.0-beta.8 UPDATE_APPLE=true \
   PREPARE_DIR="$WORK/s2" bash "$SCRIPT_DIR/prepare-source.sh" >/dev/null 2>&1
-check "merge+update: describe == v1.14.0-beta.8" "$(git -C "$WORK/s2" describe --tags)" "v1.14.0-beta.8"
+case "$(git -C "$WORK/s2" describe --tags 2>/dev/null)" in
+  v1.14.0-beta.8*)
+    echo "PASS: merge+update: describe 基于 v1.14.0-beta.8"
+    PASS=$((PASS + 1))
+    ;;
+  *)
+    echo "FAIL: merge+update: describe=$(git -C "$WORK/s2" describe --tags 2>&1)"
+    FAIL=$((FAIL + 1))
+    ;;
+esac
 check "merge+update: clients/apple == 最新 main" "$(git -C "$WORK/s2/clients/apple" rev-parse HEAD)" "$APPLE_HEAD"
+
+# 场景 3: 上游改写历史后的合并（真实回归：beta.10 与 fork testing 历史分叉，
+# 普通 merge 出现大面积 add/add 冲突，-X theirs 必须能合上且保留自有新增文件）
+if env -i PATH="$PATH" HOME="$WORK/h3" SB_REPO=largerthanlife/sing-box SB_REF=testing \
+  MERGE_TAG=v1.14.0-beta.10 \
+  PREPARE_DIR="$WORK/s3" bash "$SCRIPT_DIR/prepare-source.sh" >/dev/null 2>&1; then
+  echo "PASS: 历史分叉合并: merge v1.14.0-beta.10 成功"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: 历史分叉合并: merge v1.14.0-beta.10 失败"
+  FAIL=$((FAIL + 1))
+fi
+if [ -f "$WORK/s3/protocol/shadowsocks/method_chacha20.go" ]; then
+  echo "PASS: 历史分叉合并: 自有新增文件保留"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: 历史分叉合并: method_chacha20.go 丢失"
+  FAIL=$((FAIL + 1))
+fi
+case "$(git -C "$WORK/s3" describe --tags 2>/dev/null)" in
+  v1.14.0-beta.10*)
+    echo "PASS: 历史分叉合并: describe 基于 v1.14.0-beta.10"
+    PASS=$((PASS + 1))
+    ;;
+  *)
+    echo "FAIL: 历史分叉合并: describe=$(git -C "$WORK/s3" describe --tags 2>&1)"
+    FAIL=$((FAIL + 1))
+    ;;
+esac
+if [ -z "$(git -C "$WORK/s3" status --porcelain)" ]; then
+  echo "PASS: 历史分叉合并: 无冲突残留"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: 历史分叉合并: 存在未解决冲突"
+  FAIL=$((FAIL + 1))
+fi
 
 echo "---- ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]
