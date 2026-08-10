@@ -55,39 +55,47 @@ case "$(git -C "$WORK/s2" describe --tags 2>/dev/null)" in
 esac
 check "merge+update: clients/apple == 最新 main" "$(git -C "$WORK/s2/clients/apple" rev-parse HEAD)" "$APPLE_HEAD"
 
-# 场景 3: 上游改写历史后的合并（真实回归：beta.10 与 fork testing 历史分叉，
-# 普通 merge 出现大面积 add/add 冲突，-X theirs 必须能合上且保留自有新增文件）
+# 场景 3: 上游改写历史 + modify/delete（真实回归：beta.13 删了
+# common/process/searcher_android.go，-X theirs 盖不住这类冲突，必须额外
+# git rm；同时仍须保留自有新增文件）
 if env -i PATH="$PATH" HOME="$WORK/h3" SB_REPO=largerthanlife/sing-box SB_REF=testing \
-  MERGE_TAG=v1.14.0-beta.10 \
+  MERGE_TAG=v1.14.0-beta.13 \
   PREPARE_DIR="$WORK/s3" bash "$SCRIPT_DIR/prepare-source.sh" >/dev/null 2>&1; then
-  echo "PASS: 历史分叉合并: merge v1.14.0-beta.10 成功"
+  echo "PASS: 历史分叉+删改冲突合并: merge v1.14.0-beta.13 成功"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: 历史分叉合并: merge v1.14.0-beta.10 失败"
+  echo "FAIL: 历史分叉+删改冲突合并: merge v1.14.0-beta.13 失败"
   FAIL=$((FAIL + 1))
 fi
 if [ -f "$WORK/s3/protocol/shadowsocks/method_chacha20.go" ]; then
-  echo "PASS: 历史分叉合并: 自有新增文件保留"
+  echo "PASS: 历史分叉+删改冲突合并: 自有新增文件保留"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: 历史分叉合并: method_chacha20.go 丢失"
+  echo "FAIL: 历史分叉+删改冲突合并: method_chacha20.go 丢失"
+  FAIL=$((FAIL + 1))
+fi
+if [ ! -e "$WORK/s3/common/process/searcher_android.go" ]; then
+  echo "PASS: 历史分叉+删改冲突合并: 上游已删文件已移除"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: 历史分叉+删改冲突合并: searcher_android.go 仍残留"
   FAIL=$((FAIL + 1))
 fi
 case "$(git -C "$WORK/s3" describe --tags 2>/dev/null)" in
-  v1.14.0-beta.10*)
-    echo "PASS: 历史分叉合并: describe 基于 v1.14.0-beta.10"
+  v1.14.0-beta.13*)
+    echo "PASS: 历史分叉+删改冲突合并: describe 基于 v1.14.0-beta.13"
     PASS=$((PASS + 1))
     ;;
   *)
-    echo "FAIL: 历史分叉合并: describe=$(git -C "$WORK/s3" describe --tags 2>&1)"
+    echo "FAIL: 历史分叉+删改冲突合并: describe=$(git -C "$WORK/s3" describe --tags 2>&1)"
     FAIL=$((FAIL + 1))
     ;;
 esac
 if [ -z "$(git -C "$WORK/s3" status --porcelain)" ]; then
-  echo "PASS: 历史分叉合并: 无冲突残留"
+  echo "PASS: 历史分叉+删改冲突合并: 无冲突残留"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: 历史分叉合并: 存在未解决冲突"
+  echo "FAIL: 历史分叉+删改冲突合并: 存在未解决冲突"
   FAIL=$((FAIL + 1))
 fi
 

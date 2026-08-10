@@ -30,11 +30,37 @@ if [ -n "${MERGE_TAG:-}" ]; then
   git remote add upstream "https://github.com/${UPSTREAM_REPO:-SagerNet/sing-box}.git"
   git fetch upstream "refs/tags/${MERGE_TAG}:refs/tags/${MERGE_TAG}"
   # 上游 testing 会被 rebase/force-push（beta.10 即改写了历史，普通 merge
-  # 出现大面积 add/add 冲突）。-X theirs：冲突 hunk 一律取上游。
+  # 出现大面积 add/add 冲突）。-X theirs：内容冲突 hunk 一律取上游。
   # 约定：本 fork 的自有改动以新增文件为主（不受冲突影响）；对上游已有
   # 文件的自有修改在冲突时会被上游版本覆盖（如 option enum 的展示项，
   # 方法注册走 init() 不受影响）。
-  git merge -X theirs --no-edit "${MERGE_TAG}"
+  if ! git merge -X theirs --no-edit "${MERGE_TAG}"; then
+    # -X theirs 管不到 modify/delete（一边删、一边改）：beta.13 删了
+    # common/process/searcher_android.go 就会停在这儿。未合并路径一律跟上游：
+    # 上游还有该文件 → checkout --theirs；上游已删 → git rm。
+    unresolved="$(git diff --name-only --diff-filter=U || true)"
+    if [ -z "$unresolved" ]; then
+      echo "merge failed with no unmerged paths" >&2
+      exit 1
+    fi
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      if git cat-file -e "${MERGE_TAG}:$f" 2>/dev/null; then
+        git checkout --theirs -- "$f"
+        git add -- "$f"
+      else
+        git rm -f -- "$f"
+      fi
+    done <<UNMERGED
+$unresolved
+UNMERGED
+    if [ -n "$(git diff --name-only --diff-filter=U || true)" ]; then
+      echo "failed to resolve remaining merge conflicts:" >&2
+      git diff --name-only --diff-filter=U >&2
+      exit 1
+    fi
+    git commit --no-edit
+  fi
   git submodule update --init --recursive
 fi
 
