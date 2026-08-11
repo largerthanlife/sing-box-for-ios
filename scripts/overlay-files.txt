@@ -1,0 +1,7 @@
+# 叠到上游发版 tag 上的自有文件（相对 sing-box 仓库根目录）。
+# 只列「新增文件」；不要列对上游已有文件的修改（reset 后那些修改本就会丢掉，
+# 方法注册请走 init()，不要依赖改 option enum）。
+# 以 # 开头的行为注释。
+
+protocol/shadowsocks/method_chacha20.go
+protocol/shadowsocks/method_chacha20_test.go
