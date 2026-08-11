@@ -25,7 +25,7 @@ echo "sing-box source: ${SB_REPO}@${SB_REF}" >> "$SUMMARY"
 
 bash "$(dirname "$0")/prepare-source.sh"
 cd "${PREPARE_DIR:-$HOME/sing-box}"
-[ -z "${MERGE_TAG:-}" ] || echo "merged upstream ${MERGE_TAG}" >> "$SUMMARY"
+[ -z "${MERGE_TAG:-}" ] || echo "overlaid own files onto upstream ${MERGE_TAG}" >> "$SUMMARY"
 echo "embedded version: $(git describe --tags)" >> "$SUMMARY"
 
 make lib_install
