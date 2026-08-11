@@ -37,65 +37,72 @@ case "$(git -C "$WORK/s1" describe --tags 2>/dev/null)" in
 esac
 check "纯 clone: clients/apple == gitlink" "$(git -C "$WORK/s1/clients/apple" rev-parse HEAD)" "$APPLE_GITLINK"
 
-# 场景 2: clone + merge tag + UPDATE_APPLE=true
-# 关键回归点：UPDATE_APPLE 必须发生在 merge 的 submodule update 之后，
-# 否则 clients/apple 会被重置回旧 gitlink（本次构建失败的真实原因）
+# 场景 2: clone + overlay tag + UPDATE_APPLE=true
 env -i PATH="$PATH" HOME="$WORK/h2" SB_REPO=largerthanlife/sing-box SB_REF=testing \
-  MERGE_TAG=v1.14.0-beta.8 UPDATE_APPLE=true \
+  MERGE_TAG=v1.14.0-beta.8 UPDATE_APPLE=true OVERLAY_LIST="$SCRIPT_DIR/overlay-files.txt" \
   PREPARE_DIR="$WORK/s2" bash "$SCRIPT_DIR/prepare-source.sh" >/dev/null 2>&1
 case "$(git -C "$WORK/s2" describe --tags 2>/dev/null)" in
   v1.14.0-beta.8*)
-    echo "PASS: merge+update: describe 基于 v1.14.0-beta.8"
+    echo "PASS: overlay+update: describe 基于 v1.14.0-beta.8"
     PASS=$((PASS + 1))
     ;;
   *)
-    echo "FAIL: merge+update: describe=$(git -C "$WORK/s2" describe --tags 2>&1)"
+    echo "FAIL: overlay+update: describe=$(git -C "$WORK/s2" describe --tags 2>&1)"
     FAIL=$((FAIL + 1))
     ;;
 esac
-check "merge+update: clients/apple == 最新 main" "$(git -C "$WORK/s2/clients/apple" rev-parse HEAD)" "$APPLE_HEAD"
+check "overlay+update: clients/apple == 最新 main" "$(git -C "$WORK/s2/clients/apple" rev-parse HEAD)" "$APPLE_HEAD"
+if [ -f "$WORK/s2/protocol/shadowsocks/method_chacha20.go" ]; then
+  echo "PASS: overlay+update: 自有文件已叠上"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: overlay+update: method_chacha20.go 缺失"
+  FAIL=$((FAIL + 1))
+fi
 
-# 场景 3: 上游改写历史 + modify/delete（真实回归：beta.13 删了
-# common/process/searcher_android.go，-X theirs 盖不住这类冲突，必须额外
-# git rm；同时仍须保留自有新增文件）
+# 场景 3: 上游大幅改动后的 overlay（真实回归 beta.14：merge 会拼出编不过的树；
+# overlay 必须得到干净上游树 + 自有文件，且不含 fork 残留的已删文件）
 if env -i PATH="$PATH" HOME="$WORK/h3" SB_REPO=largerthanlife/sing-box SB_REF=testing \
-  MERGE_TAG=v1.14.0-beta.13 \
+  MERGE_TAG=v1.14.0-beta.14 OVERLAY_LIST="$SCRIPT_DIR/overlay-files.txt" \
   PREPARE_DIR="$WORK/s3" bash "$SCRIPT_DIR/prepare-source.sh" >/dev/null 2>&1; then
-  echo "PASS: 历史分叉+删改冲突合并: merge v1.14.0-beta.13 成功"
+  echo "PASS: overlay beta.14: 成功"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: 历史分叉+删改冲突合并: merge v1.14.0-beta.13 失败"
+  echo "FAIL: overlay beta.14: prepare-source 失败"
   FAIL=$((FAIL + 1))
 fi
-if [ -f "$WORK/s3/protocol/shadowsocks/method_chacha20.go" ]; then
-  echo "PASS: 历史分叉+删改冲突合并: 自有新增文件保留"
+if [ -f "$WORK/s3/protocol/shadowsocks/method_chacha20.go" ] && \
+   [ -f "$WORK/s3/protocol/shadowsocks/method_chacha20_test.go" ]; then
+  echo "PASS: overlay beta.14: 自有文件保留"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: 历史分叉+删改冲突合并: method_chacha20.go 丢失"
+  echo "FAIL: overlay beta.14: chacha20 文件缺失"
   FAIL=$((FAIL + 1))
 fi
-if [ ! -e "$WORK/s3/common/process/searcher_android.go" ]; then
-  echo "PASS: 历史分叉+删改冲突合并: 上游已删文件已移除"
+if [ ! -e "$WORK/s3/common/process/searcher_android.go" ] && \
+   [ ! -e "$WORK/s3/dns/transport/local/local_dhcp.go" ] && \
+   [ ! -e "$WORK/s3/dns/transport/local/resolv.go" ]; then
+  echo "PASS: overlay beta.14: 上游已删/旧残留文件未带回"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: 历史分叉+删改冲突合并: searcher_android.go 仍残留"
+  echo "FAIL: overlay beta.14: 仍有上游已删的残留文件"
   FAIL=$((FAIL + 1))
 fi
 case "$(git -C "$WORK/s3" describe --tags 2>/dev/null)" in
-  v1.14.0-beta.13*)
-    echo "PASS: 历史分叉+删改冲突合并: describe 基于 v1.14.0-beta.13"
+  v1.14.0-beta.14*)
+    echo "PASS: overlay beta.14: describe 基于 v1.14.0-beta.14"
     PASS=$((PASS + 1))
     ;;
   *)
-    echo "FAIL: 历史分叉+删改冲突合并: describe=$(git -C "$WORK/s3" describe --tags 2>&1)"
+    echo "FAIL: overlay beta.14: describe=$(git -C "$WORK/s3" describe --tags 2>&1)"
     FAIL=$((FAIL + 1))
     ;;
 esac
 if [ -z "$(git -C "$WORK/s3" status --porcelain)" ]; then
-  echo "PASS: 历史分叉+删改冲突合并: 无冲突残留"
+  echo "PASS: overlay beta.14: 工作树干净"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: 历史分叉+删改冲突合并: 存在未解决冲突"
+  echo "FAIL: overlay beta.14: 工作树不干净"
   FAIL=$((FAIL + 1))
 fi
 
