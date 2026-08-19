@@ -81,6 +81,7 @@ fi
 # Apple 客户端小补丁（不改 sing-box 源码树；在 tipa 构建前打到 clients/apple）
 if [ -d clients/apple ]; then
   bash "$SCRIPT_DIR/apple-patches/fix-taildrop-send-tap.sh" clients/apple
+  bash "$SCRIPT_DIR/apple-patches/fix-taildrop-share-ios15.sh" clients/apple
 fi
 
 git describe --tags
