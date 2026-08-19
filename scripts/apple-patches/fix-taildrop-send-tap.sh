@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # fix-taildrop-send-tap.sh — 修复 iOS 应用内 Taildrop 发送区点击无反应
 #
-# v2：用 UIKit UIDocumentPicker（从 keyWindow present），避免 Form/List 里
-#     SwiftUI `.fileImporter` 点了没反应。
+# v3：Button + UIKit UIDocumentPicker（从 keyWindow present）。
+#     不再用 #if 包裹 .fileImporter（会把尾随闭包括号截断，导致编不过）。
+#     iOS 上不再设置 importerPresented，fileImporter 形同未用，保留即可。
 #
 # 用法：fix-taildrop-send-tap.sh <clients/apple 目录>
 set -euo pipefail
@@ -23,12 +24,25 @@ if "TaildropDropArea(" not in text:
     print("skip taildrop tap fix: TaildropDropArea not present")
     sys.exit(0)
 
-marker_v2 = "/* cursor-taildrop-send-tap-fix-v2 */"
-if marker_v2 in text:
-    print("taildrop tap fix: already applied (v2)")
+marker_v3 = "/* cursor-taildrop-send-tap-fix-v3 */"
+if marker_v3 in text:
+    print("taildrop tap fix: already applied (v3)")
     sys.exit(0)
 
-# --- 0) 在其它 @State 旁增加 bridge（存储属性必须在 struct 顶部）---
+# 若上次 v2 把 fileImporter 的 #endif 插坏了，先还原 fileImporter 段
+broken = re.compile(
+    r"zone\n#if !os\(iOS\)\n"
+    r"(                \.fileImporter\([\s\S]*?)"
+    r"                    \}\n#endif\n"
+    r"(                \}\n)",
+    re.MULTILINE,
+)
+text2, n = broken.subn(r"zone\n\1                    }\n\2", text, count=1)
+if n:
+    text = text2
+    print("taildrop tap fix: repaired broken v2 fileImporter wrap")
+
+# --- @State bridge ---
 if "documentPickerBridge" not in text:
     state_anchor = "        @State private var alert: AlertState?\n"
     if state_anchor not in text:
@@ -43,9 +57,11 @@ if "documentPickerBridge" not in text:
         1,
     )
 
-# --- 1) 替换 iOS zone ---
+# --- 替换 iOS zone（上游 / v1 / v2）---
 zone_pat = re.compile(
-    r"[ \t]*#else\n[ \t]*(?:/\* cursor-taildrop-send-tap-fix(?:-v2)? \*/\n[ \t]*)?private var zone: some View \{.*?\n[ \t]*#endif",
+    r"[ \t]*#else\n[ \t]*(?:/\* cursor-taildrop-send-tap-fix(?:-v2)? \*/\n[ \t]*)?"
+    r"(?:@State private var documentPickerBridge = TaildropDocumentPickerBridge\(\)\n[ \t]*)?"
+    r"private var zone: some View \{.*?\n[ \t]*#endif",
     re.DOTALL,
 )
 matches = [m for m in zone_pat.finditer(text) if "TaildropDropArea(" in m.group(0)]
@@ -56,7 +72,7 @@ if len(matches) != 1:
     sys.exit(1)
 
 zone_repl = f"""        #else
-            {marker_v2}
+            {marker_v3}
             private var zone: some View {{
                 Button {{
                     presentDocumentPicker()
@@ -94,33 +110,14 @@ zone_repl = f"""        #else
                 )
             }}
         #endif"""
-
-# Fix keypaths - I used \\\.url in f-string which becomes \\.url wrong
-zone_repl = zone_repl.replace("\\\\.url", "\\.url").replace("\\\\.temporaryDirectory", "\\.temporaryDirectory")
-# Actually in f-string `\\.url` is `\.url` - good for Swift. I had `\\.url` in the f-string above as `files.map(\\.url)` 
-# In Python f-string: `\\.url` -> `\.url` (one backslash). Good.
+zone_repl = zone_repl.replace("\\\\.url", "\\.url").replace(
+    "\\\\.temporaryDirectory", "\\.temporaryDirectory"
+)
 
 m = matches[0]
 text = text[: m.start()] + zone_repl + text[m.end() :]
 
-# --- 2) iOS 不用 SwiftUI fileImporter ---
-fi_pat = re.compile(
-    r"(zone\n)(                \.fileImporter\([\s\S]*?                \}\n)",
-    re.MULTILINE,
-)
-text2, n = fi_pat.subn(
-    r"""\1#if !os(iOS)
-\2#endif
-""",
-    text,
-    count=1,
-)
-if n != 1:
-    sys.stderr.write(f"taildrop tap fix: expected 1 fileImporter wrap, got {n}\n")
-    sys.exit(1)
-text = text2
-
-# --- 3) 注入 UIKit bridge ---
+# --- UIKit bridge ---
 if "final class TaildropDocumentPickerBridge" not in text:
     bridge = r'''
 #if os(iOS)
@@ -173,5 +170,5 @@ if "final class TaildropDocumentPickerBridge" not in text:
     text = text.replace(anchor, bridge + anchor, 1)
 
 path.write_text(text)
-print(f"taildrop tap fix: patched {path} (v2 UIKit document picker)")
+print(f"taildrop tap fix: patched {path} (v3 UIKit document picker)")
 PY
