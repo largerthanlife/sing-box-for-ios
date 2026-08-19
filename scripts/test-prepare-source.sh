@@ -69,7 +69,11 @@ check "overlay+update: DropView tap 手势已移除" \
     "$WORK/s2/clients/apple/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" 2>/dev/null || echo 0)" \
   "1"
 check "overlay+update: ShareView iOS15 补丁" \
-  "$(grep -c 'cursor-taildrop-share-ios15-v1' \
+  "$(grep -c 'cursor-taildrop-share-ios15-v2' \
+    "$WORK/s2/clients/apple/ShareExtension/ShareView.swift" 2>/dev/null || echo 0)" \
+  "1"
+check "overlay+update: Share toolbar iOS15" \
+  "$(grep -c 'cursor-taildrop-share-toolbar-ios15' \
     "$WORK/s2/clients/apple/ShareExtension/ShareView.swift" 2>/dev/null || echo 0)" \
   "1"
 check "overlay+update: Share/Action deployment 15.0 标记" \

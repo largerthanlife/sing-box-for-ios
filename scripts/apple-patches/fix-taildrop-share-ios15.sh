@@ -2,11 +2,12 @@
 # fix-taildrop-share-ios15.sh — 让 Taildrop 系统分享 / Action 扩展可在 iOS 15 加载
 #
 # 上游 ShareExtension / ActionExtension 的 IPHONEOS_DEPLOYMENT_TARGET=16.0，
-# 且 ShareView 使用 NavigationStack（iOS 16+）。iOS 15.x 上扩展不会出现或点开即挂。
+# 且 ShareView 使用 NavigationStack + ToolbarContentBuilder if/else（均需 iOS 16+）。
 #
 # 本补丁：
 #   1) 把 Share/Action 的 deployment target 降到 15.0
-#   2) ShareView 改用 NavigationView（分享 UI 不需要 NavigationPath）
+#   2) ShareView：NavigationStack → NavigationView
+#   3) ShareView：toolbar 的 if/else ToolbarItem 拆成两个条件 Button（避免 buildEither iOS16）
 #
 # 用法：fix-taildrop-share-ios15.sh <clients/apple 目录>
 set -euo pipefail
@@ -14,7 +15,7 @@ set -euo pipefail
 APPLE_DIR="${1:?usage: $0 <clients/apple>}"
 VIEW="${APPLE_DIR}/ShareExtension/ShareView.swift"
 PBX="${APPLE_DIR}/sing-box.xcodeproj/project.pbxproj"
-MARKER="/* cursor-taildrop-share-ios15-v1 */"
+MARKER="/* cursor-taildrop-share-ios15-v2 */"
 
 python3 - "$VIEW" "$PBX" "$MARKER" <<'PY'
 import pathlib, re, sys
@@ -42,7 +43,11 @@ def share_action_target(text: str, plist: str, ver: str) -> bool:
         )
     )
 
-view_done = marker in view and "NavigationView {" in view
+view_done = (
+    marker in view
+    and "NavigationView {" in view
+    and "cursor-taildrop-share-toolbar-ios15" in view
+)
 pbx_done = (
     "cursor-taildrop-share-ios15-pbx" in pbx
     and share_action_target(pbx, "ShareExtension/Info.plist", "15.0")
@@ -50,15 +55,54 @@ pbx_done = (
 )
 
 if view_done and pbx_done:
-    print("taildrop share ios15: already applied (v1)")
+    print("taildrop share ios15: already applied (v2)")
     sys.exit(0)
 
 changed = []
 
+TOOLBAR_REPL = """                .toolbar {
+                    /* cursor-taildrop-share-toolbar-ios15 */
+                    ToolbarItem(placement: .confirmationAction) {
+                        if viewModel.isFinished {
+                            Button("Done") {
+                                viewModel.onFinish?()
+                            }
+                        }
+                    }
+                    ToolbarItem(placement: .cancellationAction) {
+                        if !viewModel.isFinished {
+                            Button("Cancel") {
+                                viewModel.cancel()
+                            }
+                        }
+                    }
+                }"""
+
+TOOLBAR_PAT = re.compile(
+    r"                \.toolbar \{\n"
+    r"                    if viewModel\.isFinished \{\n"
+    r"                        ToolbarItem\(placement: \.confirmationAction\) \{\n"
+    r"                            Button\(\"Done\"\) \{\n"
+    r"                                viewModel\.onFinish\?\(\)\n"
+    r"                            \}\n"
+    r"                        \}\n"
+    r"                    \} else \{\n"
+    r"                        ToolbarItem\(placement: \.cancellationAction\) \{\n"
+    r"                            Button\(\"Cancel\"\) \{\n"
+    r"                                viewModel\.cancel\(\)\n"
+    r"                            \}\n"
+    r"                        \}\n"
+    r"                    \}\n"
+    r"                \}",
+    re.MULTILINE,
+)
+
 if not view_done:
-    if marker in view and "NavigationView {" in view:
-        pass
-    elif "NavigationStack {" in view:
+    # strip older v1 marker if present; re-apply cleanly
+    view = view.replace("/* cursor-taildrop-share-ios15-v1 */\n", "")
+    view = view.replace("        /* cursor-taildrop-share-ios15-v1 */\n", "")
+
+    if "NavigationStack {" in view:
         view2, n = re.subn(
             r"(\s*)NavigationStack \{",
             rf"\1{marker}\n\1NavigationView {{",
@@ -69,38 +113,57 @@ if not view_done:
             sys.stderr.write("taildrop share ios15: failed to replace NavigationStack\n")
             sys.exit(1)
         view = view2
-        if ".navigationViewStyle(.stack)" not in view:
+    elif "NavigationView {" in view and marker not in view:
+        view2, n = re.subn(
+            r"(\s*)NavigationView \{",
+            rf"\1{marker}\n\1NavigationView {{",
+            view,
+            count=1,
+        )
+        if n != 1:
+            sys.stderr.write("taildrop share ios15: cannot stamp NavigationView marker\n")
+            sys.exit(1)
+        view = view2
+    elif marker not in view:
+        sys.stderr.write("taildrop share ios15: unexpected ShareView navigation root\n")
+        sys.exit(1)
+
+    if "cursor-taildrop-share-toolbar-ios15" not in view:
+        view2, n = TOOLBAR_PAT.subn(TOOLBAR_REPL, view, count=1)
+        if n != 1:
+            sys.stderr.write("taildrop share ios15: failed to rewrite toolbar\n")
+            sys.exit(1)
+        view = view2
+
+    if ".navigationViewStyle(.stack)" not in view:
+        view2, n = re.subn(
+            r"(                \.alert\(\$viewModel\.alert\)\n        \}\n)"
+            r"(        #if os\(macOS\)\n)",
+            r"\1"
+            r"        #if os(iOS)\n"
+            r"        .navigationViewStyle(.stack)\n"
+            r"        #endif\n"
+            r"\2",
+            view,
+            count=1,
+        )
+        if n != 1:
             view2, n = re.subn(
-                r"(                \.alert\(\$viewModel\.alert\)\n        \}\n)"
-                r"(        #if os\(macOS\)\n)",
+                r"(                \.alert\(\$viewModel\.alert\)\n        \}\n)",
                 r"\1"
                 r"        #if os(iOS)\n"
                 r"        .navigationViewStyle(.stack)\n"
-                r"        #endif\n"
-                r"\2",
+                r"        #endif\n",
                 view,
                 count=1,
             )
-            if n != 1:
-                # no macOS frame branch — still add style after NavigationView close
-                view2, n = re.subn(
-                    r"(                \.alert\(\$viewModel\.alert\)\n        \}\n)",
-                    r"\1"
-                    r"        #if os(iOS)\n"
-                    r"        .navigationViewStyle(.stack)\n"
-                    r"        #endif\n",
-                    view,
-                    count=1,
-                )
-            if n != 1:
-                sys.stderr.write(
-                    "taildrop share ios15: cannot insert navigationViewStyle\n"
-                )
-                sys.exit(1)
-            view = view2
-    else:
-        sys.stderr.write("taildrop share ios15: unexpected ShareView navigation root\n")
-        sys.exit(1)
+        if n != 1:
+            sys.stderr.write(
+                "taildrop share ios15: cannot insert navigationViewStyle\n"
+            )
+            sys.exit(1)
+        view = view2
+
     view_path.write_text(view)
     changed.append("ShareView")
 
@@ -120,7 +183,8 @@ if not pbx_done:
         and share_action_target(pbx3, "ActionExtension/Info.plist", "15.0")
     ):
         sys.stderr.write(
-            f"taildrop share ios15: Share/Action not at 15.0 (share_repl={n1} action_repl={n2})\n"
+            f"taildrop share ios15: Share/Action not at 15.0 "
+            f"(share_repl={n1} action_repl={n2})\n"
         )
         sys.exit(1)
     if "cursor-taildrop-share-ios15-pbx" not in pbx3:
@@ -135,6 +199,6 @@ if not pbx_done:
 print(
     "taildrop share ios15: patched "
     + (", ".join(changed) if changed else "noop")
-    + " (v1)"
+    + " (v2)"
 )
 PY

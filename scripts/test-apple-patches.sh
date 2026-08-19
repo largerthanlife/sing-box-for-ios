@@ -153,6 +153,21 @@ struct ShareView: View {
         NavigationStack {
             content
                 .navigationTitle("Taildrop")
+                .toolbar {
+                    if viewModel.isFinished {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") {
+                                viewModel.onFinish?()
+                            }
+                        }
+                    } else {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") {
+                                viewModel.cancel()
+                            }
+                        }
+                    }
+                }
                 .alert($viewModel.alert)
         }
         #if os(macOS)
@@ -206,14 +221,68 @@ PBX
 bash "$SHARE_FIX" "$WORK/share"
 SV="$WORK/share/ShareExtension/ShareView.swift"
 PB="$WORK/share/sing-box.xcodeproj/project.pbxproj"
-check "share ios15 marker" "$(grep -c 'cursor-taildrop-share-ios15-v1' "$SV")" "1"
+check "share ios15 marker" "$(grep -c 'cursor-taildrop-share-ios15-v2' "$SV")" "1"
 check "share uses NavigationView" "$(grep -c 'NavigationView {' "$SV")" "1"
 check "share no NavigationStack" "$(grep -c 'NavigationStack' "$SV")" "0"
 check "share navigationViewStyle" "$(grep -c 'navigationViewStyle(.stack)' "$SV")" "1"
+check "share toolbar ios15" "$(grep -c 'cursor-taildrop-share-toolbar-ios15' "$SV")" "1"
+check "share no toolbar if/else root" \
+  "$(grep -c 'if viewModel.isFinished {' "$SV")" "1"
 check "share+action at 15.0" "$(grep -c 'IPHONEOS_DEPLOYMENT_TARGET = 15.0;' "$PB")" "4"
 check "intents stays 16.0" "$(grep -c 'IPHONEOS_DEPLOYMENT_TARGET = 16.0;' "$PB")" "1"
 out="$(bash "$SHARE_FIX" "$WORK/share")"
-check "share ios15 idempotent" "$out" "taildrop share ios15: already applied (v1)"
+check "share ios15 idempotent" "$out" "taildrop share ios15: already applied (v2)"
+
+# upgrade from v1-shaped file (NavigationView but old toolbar if/else)
+mkdir -p "$WORK/sharev1/ShareExtension" "$WORK/sharev1/sing-box.xcodeproj"
+cp "$SV" "$WORK/sharev1/ShareExtension/ShareView.swift"
+cp "$PB" "$WORK/sharev1/sing-box.xcodeproj/project.pbxproj"
+python3 - "$WORK/sharev1/ShareExtension/ShareView.swift" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+t = p.read_text()
+t = t.replace("cursor-taildrop-share-ios15-v2", "cursor-taildrop-share-ios15-v1")
+t = t.replace(
+    """                .toolbar {
+                    /* cursor-taildrop-share-toolbar-ios15 */
+                    ToolbarItem(placement: .confirmationAction) {
+                        if viewModel.isFinished {
+                            Button("Done") {
+                                viewModel.onFinish?()
+                            }
+                        }
+                    }
+                    ToolbarItem(placement: .cancellationAction) {
+                        if !viewModel.isFinished {
+                            Button("Cancel") {
+                                viewModel.cancel()
+                            }
+                        }
+                    }
+                }""",
+    """                .toolbar {
+                    if viewModel.isFinished {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") {
+                                viewModel.onFinish?()
+                            }
+                        }
+                    } else {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") {
+                                viewModel.cancel()
+                            }
+                        }
+                    }
+                }""",
+)
+p.write_text(t)
+PY
+out="$(bash "$SHARE_FIX" "$WORK/sharev1")"
+check "upgrades v1 to v2" "$(echo "$out" | grep -c '(v2)')" "1"
+check "v1 upgrade has toolbar fix" \
+  "$(grep -c 'cursor-taildrop-share-toolbar-ios15' "$WORK/sharev1/ShareExtension/ShareView.swift")" "1"
 
 # real upstream apple tree if available
 if [ -d /tmp/sing-box-for-apple/ShareExtension ] && [ -f /tmp/sing-box-for-apple/sing-box.xcodeproj/project.pbxproj ]; then
@@ -223,6 +292,8 @@ if [ -d /tmp/sing-box-for-apple/ShareExtension ] && [ -f /tmp/sing-box-for-apple
   bash "$SHARE_FIX" "$WORK/shareup" >/dev/null
   check "upstream share NavigationView" \
     "$(grep -c 'NavigationView {' "$WORK/shareup/ShareExtension/ShareView.swift")" "1"
+  check "upstream share toolbar ios15" \
+    "$(grep -c 'cursor-taildrop-share-toolbar-ios15' "$WORK/shareup/ShareExtension/ShareView.swift")" "1"
   cnt="$(python3 - "$WORK/shareup/sing-box.xcodeproj/project.pbxproj" <<'PY'
 import re, sys
 pb = open(sys.argv[1]).read()
@@ -239,7 +310,7 @@ PY
 )"
   check "upstream share+action configs at 15.0" "$cnt" "4"
   out="$(bash "$SHARE_FIX" "$WORK/shareup")"
-  check "upstream share idempotent" "$out" "taildrop share ios15: already applied (v1)"
+  check "upstream share idempotent" "$out" "taildrop share ios15: already applied (v2)"
 fi
 
 if [ "$fail" -ne 0 ]; then
