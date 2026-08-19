@@ -87,6 +87,18 @@ jobs:
           ldid -SSFI/SFI.entitlements packages/Applications/$APPLICATION_NAME.app/$APPLICATION_NAME
           ldid -SExtension/Extension.entitlements packages/Applications/$APPLICATION_NAME.app/PlugIns/Extension.appex/Extension
           ldid -SIntentsExtension/IntentsExtension.entitlements packages/Applications/$APPLICATION_NAME.app/Extensions/IntentsExtension.appex/IntentsExtension
+          APP_ROOT="packages/Applications/$APPLICATION_NAME.app"
+          for pair in \
+            "ShareExtension/ShareExtension.entitlements:PlugIns/ShareExtension.appex/ShareExtension" \
+            "ActionExtension/ActionExtension.entitlements:PlugIns/ActionExtension.appex/ActionExtension" \
+            "FileProviderExtension/FileProviderExtension.entitlements:PlugIns/FileProviderExtension.appex/FileProviderExtension" \
+            "WidgetExtension/WidgetExtension.entitlements:PlugIns/WidgetExtension.appex/WidgetExtension"; do
+            ENT="${pair%%:*}"
+            BIN="${APP_ROOT}/${pair##*:}"
+            if [ -f "$BIN" ]; then
+              ldid -S"$ENT" "$BIN"
+            fi
+          done
 
           mkdir -p packages/Payload
           cp -rp packages/Applications/$APPLICATION_NAME.app packages/Payload

@@ -18,10 +18,10 @@ check() {
   fi
 }
 
-# --- fixture: 上游 beta.17 形态（.background + TaildropDropArea）---
+# --- fixture: 与上游一致的缩进（#else/#endif 前 8 空格）---
 mkdir -p "$WORK/broken/ApplicationLibrary/Views/Tools"
 cat > "$WORK/broken/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" <<'SWIFT'
-#if os(macOS)
+        #if os(macOS)
             private var zone: some View {
                 Button {
                     importerPresented = true
@@ -29,7 +29,7 @@ cat > "$WORK/broken/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" <<
                     label
                 }
             }
-#else
+        #else
             private var zone: some View {
                 label
                     .background {
@@ -40,33 +40,50 @@ cat > "$WORK/broken/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" <<
                         )
                     }
             }
-#endif
+        #endif
 SWIFT
 
 bash "$FIX" "$WORK/broken"
 TARGET="$WORK/broken/ApplicationLibrary/Views/Tools/TaildropSendManager.swift"
-check "patched overlay count" "$(grep -c '\.overlay {' "$TARGET")" "1"
-check "patched DropArea uses overlay" \
+check "patched has marker" \
+  "$(grep -c 'cursor-taildrop-send-tap-fix' "$TARGET")" "1"
+check "patched DropArea in background" \
   "$(awk '/TaildropDropArea\(/ { print prev } { prev=$0 }' "$TARGET" | tr -d '[:space:]')" \
-  ".overlay{"
-check "macOS Button untouched" "$(grep -c 'Button {' "$TARGET")" "1"
+  ".background{"
+check "patched has Button" "$(grep -c 'Button {' "$TARGET")" "2"
 
-# 幂等：再跑一次应保持 overlay
 out="$(bash "$FIX" "$WORK/broken")"
-check "idempotent message" "$out" "taildrop tap fix: already using .overlay"
+check "idempotent message" "$out" "taildrop tap fix: already applied"
 
-# --- 无 Taildrop 文件：旧客户端，应 skip ---
+# --- 上一版 .overlay 形态也应能升级 ---
+mkdir -p "$WORK/overlay/ApplicationLibrary/Views/Tools"
+cat > "$WORK/overlay/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" <<'SWIFT'
+        #else
+            private var zone: some View {
+                label
+                    .overlay {
+                        TaildropDropArea(
+                            onTap: {
+                                importerPresented = true
+                            }
+                        )
+                    }
+            }
+        #endif
+SWIFT
+bash "$FIX" "$WORK/overlay"
+check "overlay upgraded to Button" \
+  "$(grep -c 'cursor-taildrop-send-tap-fix' "$WORK/overlay/ApplicationLibrary/Views/Tools/TaildropSendManager.swift")" "1"
+
 mkdir -p "$WORK/old"
 out="$(bash "$FIX" "$WORK/old")"
 check "missing file skip" "$out" "skip taildrop tap fix: TaildropSendManager.swift not present"
 
-# --- 有文件但无 DropArea ---
 mkdir -p "$WORK/nodrop/ApplicationLibrary/Views/Tools"
 echo 'struct Foo {}' > "$WORK/nodrop/ApplicationLibrary/Views/Tools/TaildropSendManager.swift"
 out="$(bash "$FIX" "$WORK/nodrop")"
 check "no DropArea skip" "$out" "skip taildrop tap fix: TaildropDropArea not present"
 
-# --- 异常形态应失败 ---
 mkdir -p "$WORK/weird/ApplicationLibrary/Views/Tools"
 cat > "$WORK/weird/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" <<'SWIFT'
 TaildropDropArea(
@@ -79,6 +96,12 @@ if bash "$FIX" "$WORK/weird" 2>/dev/null; then
 else
   echo "OK  weird layout rejected"
 fi
+
+BUILD="$SCRIPT_DIR/build-tipa.sh"
+check "build signs ShareExtension" \
+  "$(grep -c 'ShareExtension/ShareExtension.entitlements' "$BUILD")" "1"
+check "build signs ActionExtension" \
+  "$(grep -c 'ActionExtension/ActionExtension.entitlements' "$BUILD")" "1"
 
 if [ "$fail" -ne 0 ]; then
   exit 1

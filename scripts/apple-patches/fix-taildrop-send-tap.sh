@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# fix-taildrop-send-tap.sh — 修复 iOS Taildrop 发送区点击无反应
+# fix-taildrop-send-tap.sh — 修复 iOS 应用内 Taildrop 发送区点击无反应
 #
-# 上游 TaildropSendZone 在 iOS 把带 UITapGestureRecognizer 的 UIView 放在
-# SwiftUI `.background` 里；Form/List 里前景的 Text/Image 会吃掉命中测试，
-# 导致「能看见发送区/分享图标，点了没反应」。改成 `.overlay` 让 UIView 在
-# 最上层同时接收点击与跨 App 拖放。
+# 上游 iOS 只靠 TaildropDropArea（UIViewRepresentable）的 UITapGestureRecognizer，
+# 塞进 Form/List 行的 .background/.overlay。前景 Text 吃掉命中，UIView 也常收成
+# 0 尺寸 → 「看得到发送区，点了没反应」。
+#
+# 修复：iOS 与 macOS 一样用 SwiftUI Button 打开 fileImporter；DropArea 仍放在
+# label 的 background，只负责跨 App 拖放。
 #
 # 用法：fix-taildrop-send-tap.sh <clients/apple 目录>
-# 退出码：0 已修补/已是正确形态/无此文件（旧客户端）；1 形态异常
 set -euo pipefail
 
 APPLE_DIR="${1:?usage: $0 <clients/apple>}"
@@ -26,30 +27,56 @@ if "TaildropDropArea(" not in text:
     print("skip taildrop tap fix: TaildropDropArea not present")
     sys.exit(0)
 
-overlay = re.compile(
-    r"(label\s*\n\s*)\.overlay(\s*\{\s*\n\s*TaildropDropArea\()",
-    re.MULTILINE,
-)
-background = re.compile(
-    r"(label\s*\n\s*)\.background(\s*\{\s*\n\s*TaildropDropArea\()",
-    re.MULTILINE,
-)
-
-if overlay.search(text):
-    print("taildrop tap fix: already using .overlay")
+marker = "/* cursor-taildrop-send-tap-fix */"
+if marker in text:
+    print("taildrop tap fix: already applied")
     sys.exit(0)
 
-if not background.search(text):
+# iOS 分支：#else … private var zone … TaildropDropArea … #endif
+zone_pat = re.compile(
+    r"[ \t]*#else\n[ \t]*private var zone: some View \{.*?\n[ \t]*#endif",
+    re.DOTALL,
+)
+
+matches = [m for m in zone_pat.finditer(text) if "TaildropDropArea(" in m.group(0)]
+if len(matches) != 1:
     sys.stderr.write(
-        "taildrop tap fix: unexpected layout around TaildropDropArea\n"
+        f"taildrop tap fix: expected 1 TaildropDropArea zone, got {len(matches)}\n"
     )
     sys.exit(1)
 
-new, n = background.subn(r"\1.overlay\2", text, count=1)
-if n != 1:
-    sys.stderr.write(f"taildrop tap fix: expected 1 replacement, got {n}\n")
-    sys.exit(1)
+replacement = r"""        #else
+            /* cursor-taildrop-send-tap-fix */
+            private var zone: some View {
+                Button {
+                    importerPresented = true
+                } label: {
+                    label
+                        .contentShape(Rectangle())
+                        .background {
+                            TaildropDropArea(
+                                onTargeted: { targeted in
+                                    dropTargeted = targeted
+                                },
+                                onTap: {
+                                    importerPresented = true
+                                },
+                                onFiles: { files, firstError in
+                                    if files.isEmpty, let firstError {
+                                        alert = AlertState(action: "receive dropped files", error: firstError)
+                                        return
+                                    }
+                                    send(files.map(\.url), temporaryDirectories: files.compactMap(\.temporaryDirectory))
+                                }
+                            )
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        #endif"""
 
+m = matches[0]
+new = text[: m.start()] + replacement + text[m.end() :]
 path.write_text(new)
 print(f"taildrop tap fix: patched {path}")
 PY
