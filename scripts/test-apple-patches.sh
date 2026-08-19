@@ -144,6 +144,175 @@ if [ -f "$UPSTREAM" ]; then
   check "upstream idempotent" "$out" "taildrop tap fix: already applied (v5)"
 fi
 
+# --- Share / Action iOS 15 ---
+SHARE_FIX="$SCRIPT_DIR/apple-patches/fix-taildrop-share-ios15.sh"
+mkdir -p "$WORK/share/ShareExtension" "$WORK/share/sing-box.xcodeproj"
+cat > "$WORK/share/ShareExtension/ShareView.swift" <<'SWIFT'
+struct ShareView: View {
+    var body: some View {
+        NavigationStack {
+            content
+                .navigationTitle("Taildrop")
+                .toolbar {
+                    if viewModel.isFinished {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") {
+                                viewModel.onFinish?()
+                            }
+                        }
+                    } else {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") {
+                                viewModel.cancel()
+                            }
+                        }
+                    }
+                }
+                .alert($viewModel.alert)
+        }
+        #if os(macOS)
+        .frame(minWidth: 420, minHeight: 480)
+        #endif
+    }
+}
+SWIFT
+# minimal pbx with Share+Action at 16.0 (Debug+Release each)
+cat > "$WORK/share/sing-box.xcodeproj/project.pbxproj" <<'PBX'
+		A /* Debug */ = {
+			buildSettings = {
+				INFOPLIST_FILE = ShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "sing-box";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+			};
+		};
+		B /* Release */ = {
+			buildSettings = {
+				INFOPLIST_FILE = ShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "sing-box";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+			};
+		};
+		C /* Debug */ = {
+			buildSettings = {
+				INFOPLIST_FILE = ActionExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Send with Taildrop";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+			};
+		};
+		D /* Release */ = {
+			buildSettings = {
+				INFOPLIST_FILE = ActionExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Send with Taildrop";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+			};
+		};
+		E /* Intents Debug */ = {
+			buildSettings = {
+				INFOPLIST_FILE = IntentsExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+			};
+		};
+PBX
+
+bash "$SHARE_FIX" "$WORK/share"
+SV="$WORK/share/ShareExtension/ShareView.swift"
+PB="$WORK/share/sing-box.xcodeproj/project.pbxproj"
+check "share ios15 marker" "$(grep -c 'cursor-taildrop-share-ios15-v2' "$SV")" "1"
+check "share uses NavigationView" "$(grep -c 'NavigationView {' "$SV")" "1"
+check "share no NavigationStack" "$(grep -c 'NavigationStack' "$SV")" "0"
+check "share navigationViewStyle" "$(grep -c 'navigationViewStyle(.stack)' "$SV")" "1"
+check "share toolbar ios15" "$(grep -c 'cursor-taildrop-share-toolbar-ios15' "$SV")" "1"
+check "share no toolbar if/else root" \
+  "$(grep -c 'if viewModel.isFinished {' "$SV")" "1"
+check "share+action at 15.0" "$(grep -c 'IPHONEOS_DEPLOYMENT_TARGET = 15.0;' "$PB")" "4"
+check "intents stays 16.0" "$(grep -c 'IPHONEOS_DEPLOYMENT_TARGET = 16.0;' "$PB")" "1"
+out="$(bash "$SHARE_FIX" "$WORK/share")"
+check "share ios15 idempotent" "$out" "taildrop share ios15: already applied (v2)"
+
+# upgrade from v1-shaped file (NavigationView but old toolbar if/else)
+mkdir -p "$WORK/sharev1/ShareExtension" "$WORK/sharev1/sing-box.xcodeproj"
+cp "$SV" "$WORK/sharev1/ShareExtension/ShareView.swift"
+cp "$PB" "$WORK/sharev1/sing-box.xcodeproj/project.pbxproj"
+python3 - "$WORK/sharev1/ShareExtension/ShareView.swift" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+t = p.read_text()
+t = t.replace("cursor-taildrop-share-ios15-v2", "cursor-taildrop-share-ios15-v1")
+t = t.replace(
+    """                .toolbar {
+                    /* cursor-taildrop-share-toolbar-ios15 */
+                    ToolbarItem(placement: .confirmationAction) {
+                        if viewModel.isFinished {
+                            Button("Done") {
+                                viewModel.onFinish?()
+                            }
+                        }
+                    }
+                    ToolbarItem(placement: .cancellationAction) {
+                        if !viewModel.isFinished {
+                            Button("Cancel") {
+                                viewModel.cancel()
+                            }
+                        }
+                    }
+                }""",
+    """                .toolbar {
+                    if viewModel.isFinished {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") {
+                                viewModel.onFinish?()
+                            }
+                        }
+                    } else {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") {
+                                viewModel.cancel()
+                            }
+                        }
+                    }
+                }""",
+)
+p.write_text(t)
+PY
+out="$(bash "$SHARE_FIX" "$WORK/sharev1")"
+check "upgrades v1 to v2" "$(echo "$out" | grep -c '(v2)')" "1"
+check "v1 upgrade has toolbar fix" \
+  "$(grep -c 'cursor-taildrop-share-toolbar-ios15' "$WORK/sharev1/ShareExtension/ShareView.swift")" "1"
+
+# real upstream apple tree if available
+if [ -d /tmp/sing-box-for-apple/ShareExtension ] && [ -f /tmp/sing-box-for-apple/sing-box.xcodeproj/project.pbxproj ]; then
+  mkdir -p "$WORK/shareup/ShareExtension" "$WORK/shareup/sing-box.xcodeproj"
+  cp /tmp/sing-box-for-apple/ShareExtension/ShareView.swift "$WORK/shareup/ShareExtension/"
+  cp /tmp/sing-box-for-apple/sing-box.xcodeproj/project.pbxproj "$WORK/shareup/sing-box.xcodeproj/"
+  bash "$SHARE_FIX" "$WORK/shareup" >/dev/null
+  check "upstream share NavigationView" \
+    "$(grep -c 'NavigationView {' "$WORK/shareup/ShareExtension/ShareView.swift")" "1"
+  check "upstream share toolbar ios15" \
+    "$(grep -c 'cursor-taildrop-share-toolbar-ios15' "$WORK/shareup/ShareExtension/ShareView.swift")" "1"
+  cnt="$(python3 - "$WORK/shareup/sing-box.xcodeproj/project.pbxproj" <<'PY'
+import re, sys
+pb = open(sys.argv[1]).read()
+n = 0
+for plist in ("ShareExtension/Info.plist", "ActionExtension/Info.plist"):
+    n += len(
+        re.findall(
+            rf"INFOPLIST_FILE = {re.escape(plist)};(?:[^\n]*\n){{0,4}}\t+IPHONEOS_DEPLOYMENT_TARGET = 15\.0;",
+            pb,
+        )
+    )
+print(n)
+PY
+)"
+  check "upstream share+action configs at 15.0" "$cnt" "4"
+  out="$(bash "$SHARE_FIX" "$WORK/shareup")"
+  check "upstream share idempotent" "$out" "taildrop share ios15: already applied (v2)"
+fi
+
 if [ "$fail" -ne 0 ]; then
   exit 1
 fi

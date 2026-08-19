@@ -68,6 +68,18 @@ check "overlay+update: DropView tap 手势已移除" \
   "$(grep -c 'cursor-taildrop-drop-tap-removed' \
     "$WORK/s2/clients/apple/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" 2>/dev/null || echo 0)" \
   "1"
+check "overlay+update: ShareView iOS15 补丁" \
+  "$(grep -c 'cursor-taildrop-share-ios15-v2' \
+    "$WORK/s2/clients/apple/ShareExtension/ShareView.swift" 2>/dev/null || echo 0)" \
+  "1"
+check "overlay+update: Share toolbar iOS15" \
+  "$(grep -c 'cursor-taildrop-share-toolbar-ios15' \
+    "$WORK/s2/clients/apple/ShareExtension/ShareView.swift" 2>/dev/null || echo 0)" \
+  "1"
+check "overlay+update: Share/Action deployment 15.0 标记" \
+  "$(grep -c 'cursor-taildrop-share-ios15-pbx' \
+    "$WORK/s2/clients/apple/sing-box.xcodeproj/project.pbxproj" 2>/dev/null || echo 0)" \
+  "1"
 
 # 场景 3: 上游大幅改动后的 overlay（真实回归 beta.14：merge 会拼出编不过的树；
 # overlay 必须得到干净上游树 + 自有文件，且不含 fork 残留的已删文件）
