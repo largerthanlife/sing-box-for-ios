@@ -66,6 +66,25 @@ ldid -SSFI/SFI.entitlements "${APP_PATH}/${APPLICATION_NAME}"
 ldid -SExtension/Extension.entitlements "${APP_PATH}/PlugIns/Extension.appex/Extension"
 ldid -SIntentsExtension/IntentsExtension.entitlements "${APP_PATH}/Extensions/IntentsExtension.appex/IntentsExtension"
 
+# Taildrop / 分享相关扩展：不签的话会出现在系统分享菜单里，但点开无反应或秒退
+sign_appex() {
+  local entitlements="$1" binary="$2"
+  if [ -f "$binary" ]; then
+    ldid -S"$entitlements" "$binary"
+    echo "ldid signed: $binary"
+  else
+    echo "skip ldid (missing): $binary"
+  fi
+}
+sign_appex ShareExtension/ShareExtension.entitlements \
+  "${APP_PATH}/PlugIns/ShareExtension.appex/ShareExtension"
+sign_appex ActionExtension/ActionExtension.entitlements \
+  "${APP_PATH}/PlugIns/ActionExtension.appex/ActionExtension"
+sign_appex FileProviderExtension/FileProviderExtension.entitlements \
+  "${APP_PATH}/PlugIns/FileProviderExtension.appex/FileProviderExtension"
+sign_appex WidgetExtension/WidgetExtension.entitlements \
+  "${APP_PATH}/PlugIns/WidgetExtension.appex/WidgetExtension"
+
 mkdir -p packages/Payload
 cp -rp "${APP_PATH}" packages/Payload
 cd packages

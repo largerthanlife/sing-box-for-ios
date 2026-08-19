@@ -59,6 +59,15 @@ else
   echo "FAIL: overlay+update: method_chacha20.go 缺失"
   FAIL=$((FAIL + 1))
 fi
+# Taildrop 发送区点击补丁：最新 apple 客户端应打上 UIKit document picker v5 补丁
+check "overlay+update: Taildrop 发送区 v5 补丁" \
+  "$(grep -c 'cursor-taildrop-send-tap-fix-v5' \
+    "$WORK/s2/clients/apple/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" 2>/dev/null || echo 0)" \
+  "1"
+check "overlay+update: DropView tap 手势已移除" \
+  "$(grep -c 'cursor-taildrop-drop-tap-removed' \
+    "$WORK/s2/clients/apple/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" 2>/dev/null || echo 0)" \
+  "1"
 
 # 场景 3: 上游大幅改动后的 overlay（真实回归 beta.14：merge 会拼出编不过的树；
 # overlay 必须得到干净上游树 + 自有文件，且不含 fork 残留的已删文件）

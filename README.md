@@ -42,12 +42,14 @@ App 内嵌版本号取自源码仓库的 `git describe --tags`；从分支构建
 
 - `scripts/resolve-source.sh <repo> <ref> <tag_name> [merge_tag]`：解析/校验源码来源，导出 `SB_REPO` / `SB_REF` / `MERGE_TAG`
 - `scripts/overlay-files.txt`：叠到上游 tag 上的自有文件清单
-- `scripts/prepare-source.sh`：clone → 可选 reset 到上游 tag 并 overlay → 可选替换为最新 apple 客户端
-- `scripts/build-tipa.sh`：环境变量驱动的完整构建（prepare-source → gomobile → xcodebuild → ldid → tipa）
+- `scripts/prepare-source.sh`：clone → 可选 reset 到上游 tag 并 overlay → 可选替换为最新 apple 客户端 → 打 apple 小补丁
+- `scripts/apple-patches/`：tipa 构建前对 `clients/apple` 的补丁（不改 sing-box 源码）
+- `scripts/build-tipa.sh`：环境变量驱动的完整构建（prepare-source → gomobile → xcodebuild → ldid → tipa）。会签署 Share/Action 等扩展，否则系统分享里的「Send with Taildrop」点了无反应。
 
 改动 `scripts/**` 后 CI（Test scripts）会自动运行测试样例，本地也可执行：
 
 ```bash
 bash scripts/test-resolve-source.sh
 bash scripts/test-prepare-source.sh
+bash scripts/test-apple-patches.sh
 ```
