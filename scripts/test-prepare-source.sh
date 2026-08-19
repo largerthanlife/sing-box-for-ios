@@ -59,9 +59,13 @@ else
   echo "FAIL: overlay+update: method_chacha20.go 缺失"
   FAIL=$((FAIL + 1))
 fi
-# Taildrop 发送区点击补丁：最新 apple 客户端应打上 UIKit document picker v4 补丁
-check "overlay+update: Taildrop 发送区 v4 补丁" \
-  "$(grep -c 'cursor-taildrop-send-tap-fix-v4' \
+# Taildrop 发送区点击补丁：最新 apple 客户端应打上 UIKit document picker v5 补丁
+check "overlay+update: Taildrop 发送区 v5 补丁" \
+  "$(grep -c 'cursor-taildrop-send-tap-fix-v5' \
+    "$WORK/s2/clients/apple/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" 2>/dev/null || echo 0)" \
+  "1"
+check "overlay+update: DropView tap 手势已移除" \
+  "$(grep -c 'cursor-taildrop-drop-tap-removed' \
     "$WORK/s2/clients/apple/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" 2>/dev/null || echo 0)" \
   "1"
 

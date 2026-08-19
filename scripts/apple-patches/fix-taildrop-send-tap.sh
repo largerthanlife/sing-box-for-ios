@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# fix-taildrop-send-tap.sh — 修复 iOS 应用内 Taildrop 发送区点击无反应
+# fix-taildrop-send-tap.sh — 修复 iOS 应用内 Taildrop 发送区点击无反应 / 双弹窗
 #
-# v4：Button + UIKit UIDocumentPicker；DropArea.onTap 置空 + present 防重入，
-#     避免一次点击弹出两个文件选择器。
+# v5：Button + UIKit UIDocumentPicker；去掉 DropView 的 UITapGestureRecognizer，
+#     只保留 UIDropInteraction。避免 Button 与 DropArea 各弹一次选择器。
 #
 # 用法：fix-taildrop-send-tap.sh <clients/apple 目录>
 set -euo pipefail
@@ -23,9 +23,9 @@ if "TaildropDropArea(" not in text:
     print("skip taildrop tap fix: TaildropDropArea not present")
     sys.exit(0)
 
-marker_v4 = "/* cursor-taildrop-send-tap-fix-v4 */"
-if marker_v4 in text and "isPresenting" in text:
-    print("taildrop tap fix: already applied (v4)")
+marker_v5 = "/* cursor-taildrop-send-tap-fix-v5 */"
+if marker_v5 in text and "isPresenting" in text and "cursor-taildrop-drop-tap-removed" in text:
+    print("taildrop tap fix: already applied (v5)")
     sys.exit(0)
 
 broken = re.compile(
@@ -55,7 +55,7 @@ if "documentPickerBridge" not in text:
     )
 
 zone_pat = re.compile(
-    r"[ \t]*#else\n[ \t]*(?:/\* cursor-taildrop-send-tap-fix(?:-v[234])? \*/\n[ \t]*)?"
+    r"[ \t]*#else\n[ \t]*(?:/\* cursor-taildrop-send-tap-fix(?:-v[2345])? \*/\n[ \t]*)?"
     r"(?:@State private var documentPickerBridge = TaildropDocumentPickerBridge\(\)\n[ \t]*)?"
     r"private var zone: some View \{.*?\n[ \t]*#endif",
     re.DOTALL,
@@ -68,7 +68,7 @@ if len(matches) != 1:
     sys.exit(1)
 
 zone_repl = f"""        #else
-            {marker_v4}
+            {marker_v5}
             private var zone: some View {{
                 Button {{
                     presentDocumentPicker()
@@ -81,7 +81,7 @@ zone_repl = f"""        #else
                                     dropTargeted = targeted
                                 }},
                                 onTap: {{
-                                    // Button 已处理点击；这里再 present 会弹两次选择器
+                                    // 点击由 Button 处理；DropView 已去掉 tap 手势
                                 }},
                                 onFiles: {{ files, firstError in
                                     if files.isEmpty, let firstError {{
@@ -185,6 +185,27 @@ if anchor not in text:
     sys.exit(1)
 text = text.replace(anchor, bridge + anchor, 1)
 
+# 去掉 DropView 的 UITapGestureRecognizer，避免与 SwiftUI Button 各弹一次
+tap_pat = re.compile(
+    r"(\s+backgroundColor = \.clear\n"
+    r"\s+addInteraction\(UIDropInteraction\(delegate: self\)\)\n)"
+    r"\s+addGestureRecognizer\(UITapGestureRecognizer\(target: self, action: #selector\(handleTap\)\)\)\n",
+    re.MULTILINE,
+)
+text2, n = tap_pat.subn(
+    r"\1"
+    r"                // cursor-taildrop-drop-tap-removed: tap 由外层 Button 处理，保留 drop\n",
+    text,
+    count=1,
+)
+if n != 1 and "cursor-taildrop-drop-tap-removed" not in text:
+    sys.stderr.write("taildrop tap fix: cannot remove DropView tap gesture\n")
+    sys.exit(1)
+if n == 1:
+    text = text2
+
+# handleTap 可留着（不再挂手势）；若已被删也不强制
+
 path.write_text(text)
-print(f"taildrop tap fix: patched {path} (v4 single document picker)")
+print(f"taildrop tap fix: patched {path} (v5 single document picker)")
 PY
