@@ -59,6 +59,10 @@ else
   echo "FAIL: overlay+update: method_chacha20.go 缺失"
   FAIL=$((FAIL + 1))
 fi
+# Taildrop 发送区点击补丁：最新 apple 客户端应已把 DropArea 从 background 改为 overlay
+DROP_PREV="$(awk '/TaildropDropArea\(/ { print prev } { prev=$0 }' \
+  "$WORK/s2/clients/apple/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" 2>/dev/null | tr -d '[:space:]')"
+check "overlay+update: TaildropDropArea 使用 .overlay" "$DROP_PREV" ".overlay{"
 
 # 场景 3: 上游大幅改动后的 overlay（真实回归 beta.14：merge 会拼出编不过的树；
 # overlay 必须得到干净上游树 + 自有文件，且不含 fork 残留的已删文件）
