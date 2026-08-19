@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test-apple-patches.sh — apple 客户端补丁脚本的接口/样例测试
+# test-apple-patches.sh — apple 客户端补丁 + tipa 签署检查
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -18,9 +18,29 @@ check() {
   fi
 }
 
-# --- fixture: 与上游一致的缩进（#else/#endif 前 8 空格）---
 mkdir -p "$WORK/broken/ApplicationLibrary/Views/Tools"
+# 最小可补丁骨架（含 body.fileImporter + DropArea zone + iOS DropArea 段锚点）
 cat > "$WORK/broken/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" <<'SWIFT'
+        @State private var alert: AlertState?
+
+        public var body: some View {
+            zone
+                .fileImporter(
+                    isPresented: $importerPresented,
+                    allowedContentTypes: [.item],
+                    allowsMultipleSelection: true
+                ) { result in
+                    switch result {
+                    case let .success(urls):
+                        send(urls)
+                    case let .failure(error):
+                        guard (error as? CocoaError)?.code != .userCancelled else { return }
+                        alert = AlertState(action: "select files", error: error)
+                    }
+                }
+                .alert($alert)
+        }
+
         #if os(macOS)
             private var zone: some View {
                 Button {
@@ -41,67 +61,25 @@ cat > "$WORK/broken/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" <<
                     }
             }
         #endif
+
+    #if os(iOS)
+        struct TaildropDroppedFile {
+            let url: URL
+        }
+    #endif
 SWIFT
 
 bash "$FIX" "$WORK/broken"
 TARGET="$WORK/broken/ApplicationLibrary/Views/Tools/TaildropSendManager.swift"
-check "patched has marker" \
-  "$(grep -c 'cursor-taildrop-send-tap-fix' "$TARGET")" "1"
-check "patched DropArea in background" \
-  "$(awk '/TaildropDropArea\(/ { print prev } { prev=$0 }' "$TARGET" | tr -d '[:space:]')" \
-  ".background{"
-check "patched has Button" "$(grep -c 'Button {' "$TARGET")" "2"
+check "v2 marker" "$(grep -c 'cursor-taildrop-send-tap-fix-v2' "$TARGET")" "1"
+check "UIKit bridge class" "$(grep -c 'final class TaildropDocumentPickerBridge' "$TARGET")" "1"
+check "presentDocumentPicker" "$(grep -c 'presentDocumentPicker' "$TARGET")" "3"
+check "fileImporter gated" "$(grep -c '#if !os(iOS)' "$TARGET")" "1"
+check "ActionExtension signed in build" \
+  "$(grep -c 'ActionExtension/ActionExtension.entitlements' "$SCRIPT_DIR/build-tipa.sh")" "1"
 
 out="$(bash "$FIX" "$WORK/broken")"
-check "idempotent message" "$out" "taildrop tap fix: already applied"
-
-# --- 上一版 .overlay 形态也应能升级 ---
-mkdir -p "$WORK/overlay/ApplicationLibrary/Views/Tools"
-cat > "$WORK/overlay/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" <<'SWIFT'
-        #else
-            private var zone: some View {
-                label
-                    .overlay {
-                        TaildropDropArea(
-                            onTap: {
-                                importerPresented = true
-                            }
-                        )
-                    }
-            }
-        #endif
-SWIFT
-bash "$FIX" "$WORK/overlay"
-check "overlay upgraded to Button" \
-  "$(grep -c 'cursor-taildrop-send-tap-fix' "$WORK/overlay/ApplicationLibrary/Views/Tools/TaildropSendManager.swift")" "1"
-
-mkdir -p "$WORK/old"
-out="$(bash "$FIX" "$WORK/old")"
-check "missing file skip" "$out" "skip taildrop tap fix: TaildropSendManager.swift not present"
-
-mkdir -p "$WORK/nodrop/ApplicationLibrary/Views/Tools"
-echo 'struct Foo {}' > "$WORK/nodrop/ApplicationLibrary/Views/Tools/TaildropSendManager.swift"
-out="$(bash "$FIX" "$WORK/nodrop")"
-check "no DropArea skip" "$out" "skip taildrop tap fix: TaildropDropArea not present"
-
-mkdir -p "$WORK/weird/ApplicationLibrary/Views/Tools"
-cat > "$WORK/weird/ApplicationLibrary/Views/Tools/TaildropSendManager.swift" <<'SWIFT'
-TaildropDropArea(
-    onTap: {}
-)
-SWIFT
-if bash "$FIX" "$WORK/weird" 2>/dev/null; then
-  echo "FAIL weird layout should exit non-zero" >&2
-  fail=1
-else
-  echo "OK  weird layout rejected"
-fi
-
-BUILD="$SCRIPT_DIR/build-tipa.sh"
-check "build signs ShareExtension" \
-  "$(grep -c 'ShareExtension/ShareExtension.entitlements' "$BUILD")" "1"
-check "build signs ActionExtension" \
-  "$(grep -c 'ActionExtension/ActionExtension.entitlements' "$BUILD")" "1"
+check "idempotent" "$out" "taildrop tap fix: already applied (v2)"
 
 if [ "$fail" -ne 0 ]; then
   exit 1

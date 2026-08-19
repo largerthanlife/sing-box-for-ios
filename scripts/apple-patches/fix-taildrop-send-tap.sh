@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
 # fix-taildrop-send-tap.sh — 修复 iOS 应用内 Taildrop 发送区点击无反应
 #
-# 上游 iOS 只靠 TaildropDropArea（UIViewRepresentable）的 UITapGestureRecognizer，
-# 塞进 Form/List 行的 .background/.overlay。前景 Text 吃掉命中，UIView 也常收成
-# 0 尺寸 → 「看得到发送区，点了没反应」。
-#
-# 修复：iOS 与 macOS 一样用 SwiftUI Button 打开 fileImporter；DropArea 仍放在
-# label 的 background，只负责跨 App 拖放。
+# v2：用 UIKit UIDocumentPicker（从 keyWindow present），避免 Form/List 里
+#     SwiftUI `.fileImporter` 点了没反应。
 #
 # 用法：fix-taildrop-send-tap.sh <clients/apple 目录>
 set -euo pipefail
@@ -27,17 +23,31 @@ if "TaildropDropArea(" not in text:
     print("skip taildrop tap fix: TaildropDropArea not present")
     sys.exit(0)
 
-marker = "/* cursor-taildrop-send-tap-fix */"
-if marker in text:
-    print("taildrop tap fix: already applied")
+marker_v2 = "/* cursor-taildrop-send-tap-fix-v2 */"
+if marker_v2 in text:
+    print("taildrop tap fix: already applied (v2)")
     sys.exit(0)
 
-# iOS 分支：#else … private var zone … TaildropDropArea … #endif
+# --- 0) 在其它 @State 旁增加 bridge（存储属性必须在 struct 顶部）---
+if "documentPickerBridge" not in text:
+    state_anchor = "        @State private var alert: AlertState?\n"
+    if state_anchor not in text:
+        sys.stderr.write("taildrop tap fix: cannot find @State alert anchor\n")
+        sys.exit(1)
+    text = text.replace(
+        state_anchor,
+        state_anchor
+        + "        #if os(iOS)\n"
+        + "            @State private var documentPickerBridge = TaildropDocumentPickerBridge()\n"
+        + "        #endif\n",
+        1,
+    )
+
+# --- 1) 替换 iOS zone ---
 zone_pat = re.compile(
-    r"[ \t]*#else\n[ \t]*private var zone: some View \{.*?\n[ \t]*#endif",
+    r"[ \t]*#else\n[ \t]*(?:/\* cursor-taildrop-send-tap-fix(?:-v2)? \*/\n[ \t]*)?private var zone: some View \{.*?\n[ \t]*#endif",
     re.DOTALL,
 )
-
 matches = [m for m in zone_pat.finditer(text) if "TaildropDropArea(" in m.group(0)]
 if len(matches) != 1:
     sys.stderr.write(
@@ -45,38 +55,123 @@ if len(matches) != 1:
     )
     sys.exit(1)
 
-replacement = r"""        #else
-            /* cursor-taildrop-send-tap-fix */
-            private var zone: some View {
-                Button {
-                    importerPresented = true
-                } label: {
+zone_repl = f"""        #else
+            {marker_v2}
+            private var zone: some View {{
+                Button {{
+                    presentDocumentPicker()
+                }} label: {{
                     label
                         .contentShape(Rectangle())
-                        .background {
+                        .background {{
                             TaildropDropArea(
-                                onTargeted: { targeted in
+                                onTargeted: {{ targeted in
                                     dropTargeted = targeted
-                                },
-                                onTap: {
-                                    importerPresented = true
-                                },
-                                onFiles: { files, firstError in
-                                    if files.isEmpty, let firstError {
+                                }},
+                                onTap: {{
+                                    presentDocumentPicker()
+                                }},
+                                onFiles: {{ files, firstError in
+                                    if files.isEmpty, let firstError {{
                                         alert = AlertState(action: "receive dropped files", error: firstError)
                                         return
-                                    }
-                                    send(files.map(\.url), temporaryDirectories: files.compactMap(\.temporaryDirectory))
-                                }
+                                    }}
+                                    send(files.map(\\.url), temporaryDirectories: files.compactMap(\\.temporaryDirectory))
+                                }}
                             )
-                        }
-                }
+                        }}
+                }}
                 .buttonStyle(.plain)
-            }
+            }}
+
+            private func presentDocumentPicker() {{
+                documentPickerBridge.present(
+                    onPick: {{ urls in send(urls) }},
+                    onFailure: {{ error in
+                        guard (error as? CocoaError)?.code != .userCancelled else {{ return }}
+                        alert = AlertState(action: "select files", error: error)
+                    }}
+                )
+            }}
         #endif"""
 
+# Fix keypaths - I used \\\.url in f-string which becomes \\.url wrong
+zone_repl = zone_repl.replace("\\\\.url", "\\.url").replace("\\\\.temporaryDirectory", "\\.temporaryDirectory")
+# Actually in f-string `\\.url` is `\.url` - good for Swift. I had `\\.url` in the f-string above as `files.map(\\.url)` 
+# In Python f-string: `\\.url` -> `\.url` (one backslash). Good.
+
 m = matches[0]
-new = text[: m.start()] + replacement + text[m.end() :]
-path.write_text(new)
-print(f"taildrop tap fix: patched {path}")
+text = text[: m.start()] + zone_repl + text[m.end() :]
+
+# --- 2) iOS 不用 SwiftUI fileImporter ---
+fi_pat = re.compile(
+    r"(zone\n)(                \.fileImporter\([\s\S]*?                \}\n)",
+    re.MULTILINE,
+)
+text2, n = fi_pat.subn(
+    r"""\1#if !os(iOS)
+\2#endif
+""",
+    text,
+    count=1,
+)
+if n != 1:
+    sys.stderr.write(f"taildrop tap fix: expected 1 fileImporter wrap, got {n}\n")
+    sys.exit(1)
+text = text2
+
+# --- 3) 注入 UIKit bridge ---
+if "final class TaildropDocumentPickerBridge" not in text:
+    bridge = r'''
+#if os(iOS)
+    /// Form/List 内 SwiftUI `.fileImporter` 在部分环境下不弹出；改从 keyWindow present。
+    final class TaildropDocumentPickerBridge: NSObject, UIDocumentPickerDelegate {
+        private var onPick: (([URL]) -> Void)?
+        private var onFailure: ((Error) -> Void)?
+
+        func present(onPick: @escaping ([URL]) -> Void, onFailure: @escaping (Error) -> Void) {
+            self.onPick = onPick
+            self.onFailure = onFailure
+            guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else {
+                onFailure(CocoaError(.fileNoSuchFile))
+                return
+            }
+            let root = scene.windows.first(where: \.isKeyWindow)?.rootViewController
+                ?? scene.windows.first?.rootViewController
+            guard var top = root else {
+                onFailure(CocoaError(.fileNoSuchFile))
+                return
+            }
+            while let presented = top.presentedViewController {
+                top = presented
+            }
+            let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
+            picker.allowsMultipleSelection = true
+            picker.delegate = self
+            top.present(picker, animated: true)
+        }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            onPick?(urls)
+            onPick = nil
+            onFailure = nil
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            onFailure?(CocoaError(.userCancelled))
+            onPick = nil
+            onFailure = nil
+        }
+    }
+#endif
+
+'''
+    anchor = "    #if os(iOS)\n        struct TaildropDroppedFile {"
+    if anchor not in text:
+        sys.stderr.write("taildrop tap fix: cannot find insertion point for picker bridge\n")
+        sys.exit(1)
+    text = text.replace(anchor, bridge + anchor, 1)
+
+path.write_text(text)
+print(f"taildrop tap fix: patched {path} (v2 UIKit document picker)")
 PY
