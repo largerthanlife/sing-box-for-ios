@@ -107,6 +107,7 @@ jobs:
 
       - name: Build TIPA reF1nd
         if: ${{ inputs.run_build_reF1nd == 'true' }}
+        continue-on-error: true
         run: |
           set -euo pipefail
           export SB_REPO="reF1nd/sing-box"
@@ -119,7 +120,9 @@ jobs:
           export OUTPUT_NAME="sing-box-reF1nd-${{ inputs.tag_name }}.tipa"
           bash "${GITHUB_WORKSPACE}/scripts/build-tipa.sh"
 
+      # 原版 tipa 编成功就发版；reF1nd 找不到对应 tag 时不应挡住上传
       - name: Create Release and Upload TIPA
+        if: ${{ hashFiles('sing-box-*.tipa') != '' }}
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ inputs.tag_name }}
