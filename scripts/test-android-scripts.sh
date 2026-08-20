@@ -23,5 +23,10 @@ awk '
 check "mkdir libs before build_libbox" "$(cat /tmp/order.txt)" "1"
 check "fallback copy libbox.aar" \
   "$(grep -c 'copied \$aar into android app/libs' "$SCRIPT_DIR/build-apk.sh" || true)" "1"
+# universal 只匹配一次，避免同一 apk 被两个 glob 重复收集
+check "no duplicate universal glob" \
+  "$(grep -c '\*universal\*\.apk' "$SCRIPT_DIR/build-apk.sh" || true)" "0"
+check "prefer universal apk pattern" \
+  "$(grep -c '\*-universal-\*\.apk' "$SCRIPT_DIR/build-apk.sh" || true)" "1"
 if [ "$fail" -ne 0 ]; then exit 1; fi
 echo "all android script smoke tests passed"
