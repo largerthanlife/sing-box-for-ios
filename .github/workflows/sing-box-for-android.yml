@@ -1,0 +1,110 @@
+name: Build sing-box-for-android
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: '版本号 (例：1.14.0-beta.17)'
+        required: true
+        type: string
+      sing_box_repo:
+        description: 'sing-box 源码仓库 (owner/repo)'
+        required: false
+        default: 'largerthanlife/sing-box'
+        type: string
+      sing_box_ref:
+        description: 'sing-box 分支或 tag (留空则使用 v<版本号>)'
+        required: false
+        default: ''
+        type: string
+      upstream_tag:
+        description: '可选: 上游 tag 做底再叠 overlay (例 v1.14.0-beta.17)'
+        required: false
+        default: ''
+        type: string
+      android_ref:
+        description: 'sing-box-for-android 分支'
+        required: false
+        default: 'dev'
+        type: string
+      prerelease:
+        description: '是否发布为测试版'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      build_variant:
+        description: 'debug=旁加载(推荐) / release=需签名 Secrets'
+        required: false
+        default: 'debug'
+        type: choice
+        options:
+          - 'debug'
+          - 'release'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.25'
+          cache: false
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK / build-tools
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "ndk;28.0.13004108" "cmake;3.22.1" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.0.13004108" >> "$GITHUB_ENV"
+
+      - name: Build APK
+        env:
+          LOCAL_PROPERTIES: ${{ secrets.LOCAL_PROPERTIES }}
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.build_variant }}" = "release" ]; then
+            if [ -z "${LOCAL_PROPERTIES:-}" ] || [ -z "${RELEASE_KEYSTORE_BASE64:-}" ]; then
+              echo "release build needs secrets LOCAL_PROPERTIES and RELEASE_KEYSTORE_BASE64" >&2
+              exit 1
+            fi
+          fi
+          source "${GITHUB_WORKSPACE}/scripts/resolve-source.sh" \
+            "${{ inputs.sing_box_repo }}" \
+            "${{ inputs.sing_box_ref }}" \
+            "${{ inputs.tag_name }}" \
+            "${{ inputs.upstream_tag }}"
+          export TAG_NAME="${{ inputs.tag_name }}"
+          export ANDROID_REF="${{ inputs.android_ref }}"
+          export BUILD_VARIANT="${{ inputs.build_variant }}"
+          bash "${GITHUB_WORKSPACE}/scripts/build-apk.sh"
+
+      - name: Create Release and Upload APK
+        if: ${{ hashFiles('sing-box-*.apk') != '' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.tag_name }}
+          name: ${{ inputs.tag_name }}
+          prerelease: ${{ inputs.prerelease == 'true' }}
+          files: sing-box-*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -20,6 +20,23 @@
 - **自有改动必须是新增文件**，并把路径写进 `scripts/overlay-files.txt`。对上游已有文件的修改不会被带上（方法注册请走 `init()`，不要依赖改 option enum）。
 - 自定义分支不叫 `testing` 的话，改 `auto-build.yml` 里 `SB_REF` 的默认值。
 
+## Android APK（Build sing-box-for-android）
+
+同一仓库也可编 Android 图形客户端 APK（旁加载 / 多数 Chromebook）：
+
+Actions → **Build sing-box-for-android** → Run workflow。
+
+| 参数 | 说明 | 默认 |
+|---|---|---|
+| `tag_name` | 发布版本号 | 必填 |
+| `sing_box_ref` | 例 `testing` | 空则 `v<tag_name>` |
+| `upstream_tag` | 上游 tag 做底 + overlay | 空 |
+| `build_variant` | `debug`（推荐旁加载）或 `release` | `debug` |
+
+自有 core 文件仍写在 `scripts/overlay-files.txt`。定时任务见 **Auto build on upstream release**（Android 版 workflow：`auto-build-android.yml`）。
+
+---
+
 ## 手动构建（Build sing-box-for-ios）
 
 Actions → **Build sing-box-for-ios** → Run workflow：
