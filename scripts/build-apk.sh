@@ -80,12 +80,14 @@ idx=0
 collect_apks() {
   local dir="$1" label="$2"
   local apks=()
-  local f
-  for f in "$dir"/*-universal-*.apk "$dir"/*universal*.apk; do
+  local f base name seen=""
+  # Prefer universal APK only (avoid uploading every ABI + double-matching the same file).
+  for f in "$dir"/*-universal-*.apk; do
     [ -f "$f" ] || continue
     apks+=("$f")
+    seen=1
   done
-  if [ "${#apks[@]}" -eq 0 ]; then
+  if [ -z "$seen" ]; then
     for f in "$dir"/*.apk; do
       [ -f "$f" ] || continue
       apks+=("$f")
