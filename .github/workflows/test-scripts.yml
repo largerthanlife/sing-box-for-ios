@@ -28,3 +28,6 @@ jobs:
 
       - name: Run apple patch tests
         run: bash scripts/test-apple-patches.sh
+
+      - name: Run android script smoke tests
+        run: bash scripts/test-android-scripts.sh
