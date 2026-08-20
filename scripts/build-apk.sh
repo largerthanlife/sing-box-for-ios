@@ -34,13 +34,27 @@ if [ "$BUILD_VARIANT" = "release" ]; then
   echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$ANDROID_DIR/app/release.keystore"
 fi
 
-# gomobile / libbox → 自动拷到 ../sing-box-for-android/app/libs
+# build_libbox 仅在 ../sing-box-for-android/app/libs 已存在时才会自动拷贝 aar
+mkdir -p "$ANDROID_DIR/app/libs"
 make lib_install
 export PATH="$PATH:$(go env GOPATH)/bin"
 go run ./cmd/internal/build_libbox -target android
 
+# 兜底：若自动拷贝未发生，从 sing-box 工作目录手动拷入
+for aar in libbox.aar libbox-legacy.aar; do
+  if [ ! -f "$ANDROID_DIR/app/libs/$aar" ] && [ -f "$PREPARE_DIR/$aar" ]; then
+    cp -f "$PREPARE_DIR/$aar" "$ANDROID_DIR/app/libs/$aar"
+    echo "copied $aar into android app/libs (fallback)"
+  fi
+done
+if [ ! -f "$ANDROID_DIR/app/libs/libbox.aar" ]; then
+  echo "libbox.aar missing under $ANDROID_DIR/app/libs after build_libbox" >&2
+  ls -la "$PREPARE_DIR"/*.aar 2>/dev/null || true
+  ls -la "$ANDROID_DIR/app/libs" || true
+  exit 1
+fi
+
 cd "$ANDROID_DIR"
-mkdir -p app/libs
 ls -la app/libs
 
 case "$BUILD_VARIANT" in
