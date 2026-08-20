@@ -22,7 +22,7 @@
 
 ## Android APK（Build sing-box-for-android）
 
-同一仓库也可编 Android 图形客户端 APK（旁加载 / 多数 Chromebook）：
+同一仓库也可编 Android 图形客户端 APK（旁加载 / Chromebook）：
 
 Actions → **Build sing-box-for-android** → Run workflow。
 
@@ -32,6 +32,15 @@ Actions → **Build sing-box-for-android** → Run workflow。
 | `sing_box_ref` | 例 `testing` | 空则 `v<tag_name>` |
 | `upstream_tag` | 上游 tag 做底 + overlay | 空 |
 | `build_variant` | `debug`（推荐旁加载）或 `release` | `debug` |
+
+默认只上传两个分架构包（各约 60–70MB，不再传 150MB+ universal）：
+
+| 文件名含 | 装哪里 |
+|---|---|
+| `arm64-v8a` | 手机、ARM Chromebook |
+| `x86_64` | Intel / AMD Chromebook |
+
+不需要 Android 5 的 `legacy` 包；若要改 ABI / 加 universal / legacy，可在 workflow 里设环境变量 `APK_ABIS`、`APK_INCLUDE_UNIVERSAL`、`APK_INCLUDE_LEGACY`。
 
 自有 core 文件仍写在 `scripts/overlay-files.txt`。定时任务见 **Auto build on upstream release**（Android 版 workflow：`auto-build-android.yml`）。
 
