@@ -96,6 +96,10 @@ jobs:
           export TAG_NAME="${{ inputs.tag_name }}"
           export ANDROID_REF="${{ inputs.android_ref }}"
           export BUILD_VARIANT="${{ inputs.build_variant }}"
+          # 手机(arm64) + Chromebook(x86_64)；不传 universal / legacy
+          export APK_ABIS="arm64-v8a,x86_64"
+          export APK_INCLUDE_LEGACY="false"
+          export APK_INCLUDE_UNIVERSAL="false"
           bash "${GITHUB_WORKSPACE}/scripts/build-apk.sh"
 
       - name: Create Release and Upload APK
