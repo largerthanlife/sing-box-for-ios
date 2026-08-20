@@ -60,13 +60,9 @@ ls -la app/libs
 case "$BUILD_VARIANT" in
   debug)
     ./gradlew --no-daemon :app:assembleOtherDebug :app:assembleOtherLegacyDebug
-    OUT_GLOB1=app/build/outputs/apk/other/debug/*.apk
-    OUT_GLOB2=app/build/outputs/apk/otherLegacy/debug/*.apk
     ;;
   release)
     ./gradlew --no-daemon :app:assembleOtherRelease :app:assembleOtherLegacyRelease
-    OUT_GLOB1=app/build/outputs/apk/other/release/*.apk
-    OUT_GLOB2=app/build/outputs/apk/otherLegacy/release/*.apk
     ;;
   *)
     echo "unknown BUILD_VARIANT: $BUILD_VARIANT (want debug|release)" >&2
@@ -80,19 +76,44 @@ DEST_DIR="${GITHUB_WORKSPACE:-.}"
 mkdir -p "$DEST_DIR"
 shopt -s nullglob
 idx=0
-for apk in $OUT_GLOB1 $OUT_GLOB2; do
-  idx=$((idx + 1))
-  base="$(basename "$apk")"
-  # SFA-x.y.z-xxx.apk → sing-box-<tag>-other[Legacy].apk
-  if [[ "$apk" == *otherLegacy* ]]; then
-    name="${OUTPUT_PREFIX}-${TAG_NAME}-otherLegacy.apk"
-  else
-    name="${OUTPUT_PREFIX}-${TAG_NAME}-other.apk"
+# 优先上传 universal；若无则上传全部 ABI，保留原文件名避免互相覆盖
+collect_apks() {
+  local dir="$1" label="$2"
+  local apks=()
+  local f
+  for f in "$dir"/*-universal-*.apk "$dir"/*universal*.apk; do
+    [ -f "$f" ] || continue
+    apks+=("$f")
+  done
+  if [ "${#apks[@]}" -eq 0 ]; then
+    for f in "$dir"/*.apk; do
+      [ -f "$f" ] || continue
+      apks+=("$f")
+    done
   fi
-  cp -f "$apk" "${DEST_DIR}/${name}"
-  echo "apk: ${name} (from ${base})" >> "$SUMMARY"
-  echo -e "SHA256 ${name}:\n$(sha256sum "${DEST_DIR}/${name}")" >> "$SUMMARY"
-done
+  for f in "${apks[@]+"${apks[@]}"}"; do
+    idx=$((idx + 1))
+    base="$(basename "$f")"
+    name="${OUTPUT_PREFIX}-${TAG_NAME}-${label}-${base#SFA-}"
+    if [ -f "${DEST_DIR}/${name}" ]; then
+      name="${OUTPUT_PREFIX}-${TAG_NAME}-${label}-${idx}.apk"
+    fi
+    cp -f "$f" "${DEST_DIR}/${name}"
+    echo "apk: ${name} (from ${base})" >> "$SUMMARY"
+    echo -e "SHA256 ${name}:\n$(sha256sum "${DEST_DIR}/${name}")" >> "$SUMMARY"
+  done
+}
+
+case "$BUILD_VARIANT" in
+  debug)
+    collect_apks app/build/outputs/apk/other/debug other
+    collect_apks app/build/outputs/apk/otherLegacy/debug otherLegacy
+    ;;
+  release)
+    collect_apks app/build/outputs/apk/other/release other
+    collect_apks app/build/outputs/apk/otherLegacy/release otherLegacy
+    ;;
+esac
 shopt -u nullglob
 
 if [ "$idx" -eq 0 ]; then
