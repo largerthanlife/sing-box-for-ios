@@ -9,7 +9,10 @@
 #   UPSTREAM_REPO  (可选) MERGE_TAG 的来源仓库，默认 SagerNet/sing-box
 #   UPDATE_APPLE   (可选) "true" 时重新拉取最新 sing-box-for-apple
 #   DISPLAY_SUFFIX (可选) CFBundleDisplayName 后缀
-#   BUNDLE_ID      (可选) 覆盖 PRODUCT_BUNDLE_IDENTIFIER
+#   BUNDLE_ID      (可选) 覆盖 PRODUCT_BUNDLE_IDENTIFIER（主 App）
+#   BASE_PACKAGE_IDENTIFIER (可选) 覆盖全家桶 Bundle 前缀；不设则跟 BUNDLE_ID
+#   MARKETING_VERSION (可选) CFBundleShortVersionString，默认用 TAG_NAME
+#   CURRENT_PROJECT_VERSION (可选) CFBundleVersion；默认用 TAG_NAME 数字化，避免一直为 1
 #   OUTPUT_NAME    (可选) 产物文件名，默认 sing-box-${TAG_NAME}.tipa
 #
 # 产物写入 ${GITHUB_WORKSPACE}，兼容 macOS 自带 bash 3.2。
@@ -19,9 +22,21 @@ set -euo pipefail
 SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
 APPLICATION_NAME=sing-box
 OUTPUT_NAME="${OUTPUT_NAME:-${APPLICATION_NAME}-${TAG_NAME}.tipa}"
+# 旁加载更新依赖同一 Bundle ID；上游 apple 客户端偶发改前缀会导致“装了新包却打开旧 App”
+DEFAULT_BUNDLE_ID="io.nekohasekai.sfavt"
+BUNDLE_ID="${BUNDLE_ID:-$DEFAULT_BUNDLE_ID}"
+BASE_PACKAGE_IDENTIFIER="${BASE_PACKAGE_IDENTIFIER:-$BUNDLE_ID}"
+MARKETING_VERSION="${MARKETING_VERSION:-$TAG_NAME}"
+# CFBundleVersion 需单调变化，TrollStore/系统才愿意覆盖安装
+if [ -z "${CURRENT_PROJECT_VERSION:-}" ]; then
+  CURRENT_PROJECT_VERSION="$(printf '%s' "$TAG_NAME" | tr -cd '0-9')"
+  [ -n "$CURRENT_PROJECT_VERSION" ] || CURRENT_PROJECT_VERSION="$(date +%Y%m%d%H%M)"
+fi
 
 echo "${BUILD_LABEL:-sing-box}-v${TAG_NAME}" >> "$SUMMARY"
 echo "sing-box source: ${SB_REPO}@${SB_REF}" >> "$SUMMARY"
+echo "bundle id: ${BUNDLE_ID} (base ${BASE_PACKAGE_IDENTIFIER})" >> "$SUMMARY"
+echo "marketing version: ${MARKETING_VERSION} / build ${CURRENT_PROJECT_VERSION}" >> "$SUMMARY"
 
 bash "$(dirname "$0")/prepare-source.sh"
 cd "${PREPARE_DIR:-$HOME/sing-box}"
@@ -39,9 +54,10 @@ XCODE_EXTRA=()
 if [ -n "${DISPLAY_SUFFIX:-}" ]; then
   XCODE_EXTRA[${#XCODE_EXTRA[@]}]="INFOPLIST_KEY_CFBundleDisplayName=${APPLICATION_NAME}${DISPLAY_SUFFIX}"
 fi
-if [ -n "${BUNDLE_ID:-}" ]; then
-  XCODE_EXTRA[${#XCODE_EXTRA[@]}]="PRODUCT_BUNDLE_IDENTIFIER=${BUNDLE_ID}"
-fi
+XCODE_EXTRA[${#XCODE_EXTRA[@]}]="PRODUCT_BUNDLE_IDENTIFIER=${BUNDLE_ID}"
+XCODE_EXTRA[${#XCODE_EXTRA[@]}]="BASE_PACKAGE_IDENTIFIER=${BASE_PACKAGE_IDENTIFIER}"
+XCODE_EXTRA[${#XCODE_EXTRA[@]}]="MARKETING_VERSION=${MARKETING_VERSION}"
+XCODE_EXTRA[${#XCODE_EXTRA[@]}]="CURRENT_PROJECT_VERSION=${CURRENT_PROJECT_VERSION}"
 
 xcodebuild \
   -project sing-box.xcodeproj \

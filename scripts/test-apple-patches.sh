@@ -313,6 +313,16 @@ PY
   check "upstream share idempotent" "$out" "taildrop share ios15: already applied (v2)"
 fi
 
+# tipa 旁加载：默认固定 sfavt，并带上版本号，避免装完仍打开旧 App / 内核看起来不变
+check "build-tipa default bundle sfavt" \
+  "$(grep -c 'DEFAULT_BUNDLE_ID=\"io.nekohasekai.sfavt\"' "$SCRIPT_DIR/build-tipa.sh" || true)" "1"
+check "build-tipa sets BASE_PACKAGE_IDENTIFIER" \
+  "$(grep -c 'BASE_PACKAGE_IDENTIFIER=\${BASE_PACKAGE_IDENTIFIER}' "$SCRIPT_DIR/build-tipa.sh" || true)" "1"
+check "build-tipa sets MARKETING_VERSION" \
+  "$(grep -c 'MARKETING_VERSION=\${MARKETING_VERSION}' "$SCRIPT_DIR/build-tipa.sh" || true)" "1"
+check "auto-build pins sfavt" \
+  "$(grep -c 'BUNDLE_ID=\"io.nekohasekai.sfavt\"' "$SCRIPT_DIR/../.github/workflows/auto-build.yml" || true)" "1"
+
 if [ "$fail" -ne 0 ]; then
   exit 1
 fi

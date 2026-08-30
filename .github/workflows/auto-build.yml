@@ -106,6 +106,9 @@ jobs:
           # 上游发版时 clients/apple 的 submodule 指针可能滞后于 libbox API（见过 beta.8 编不过），
           # 始终改用 sing-box-for-apple 最新 main
           export UPDATE_APPLE="true"
+          # 固定旁加载 Bundle ID，避免 UPDATE_APPLE 后变成 sfamt 等另一套 App，装完仍打开旧 rc
+          export BUNDLE_ID="io.nekohasekai.sfavt"
+          export BASE_PACKAGE_IDENTIFIER="io.nekohasekai.sfavt"
           bash "${GITHUB_WORKSPACE}/scripts/build-tipa.sh"
 
       - name: Create Release and Upload TIPA
