@@ -31,3 +31,6 @@ jobs:
 
       - name: Run android script smoke tests
         run: bash scripts/test-android-scripts.sh
+
+      - name: Run auto-build missing-asset check tests
+        run: bash scripts/test-check-auto-build.sh

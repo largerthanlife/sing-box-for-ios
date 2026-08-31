@@ -1,10 +1,9 @@
 name: Auto build on upstream release
 
-# 每 6 小时检查一次 SagerNet/sing-box 的最新 release（含 beta）：
-# 发现本仓库还没出过对应版本时，克隆 sing_box 分支（默认 largerthanlife/sing-box@testing），
-# 把上游新 tag 合入后编译并发布 Release。已出过的版本自动跳过。
-# 注意：fork 仓库的定时任务需要在 Actions 页面启用过一次 workflow 后才会真正运行；
-# 仓库长期无活动（约 60 天）GitHub 会自动暂停定时任务，届时回页面重新启用即可。
+# 每 6 小时检查一次 SagerNet/sing-box 最近 release：
+# - 最新上游若本仓库还没有 Release，或有 Release 但缺 .tipa → 编 tipa
+# - 再往前若干条：仅当已有 Release 缺 .tipa 时补编（不给从未跟过的老版本开新坑）
+# 与 Android workflow 共用同一 Release tag，各自补自己的产物。
 
 on:
   schedule:
@@ -18,7 +17,7 @@ on:
         type: string
 
 permissions:
-  contents: write  # 允许创建 release
+  contents: write
 
 concurrency:
   group: auto-build
@@ -28,41 +27,26 @@ jobs:
   check:
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.check.outputs.tag }}
-      prerelease: ${{ steps.check.outputs.prerelease }}
       should_build: ${{ steps.check.outputs.should_build }}
+      matrix: ${{ steps.check.outputs.matrix }}
     steps:
-      - name: Check upstream release
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Check upstream releases for missing tipa
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          REL=$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
-            "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=1")
-          TAG=$(printf '%s' "$REL" | jq -r '.[0].tag_name | ltrimstr("v")')
-          PRE=$(printf '%s' "$REL" | jq -r '.[0].prerelease')
-          if [ -z "${TAG}" ] || [ "${TAG}" = "null" ]; then
-            echo "failed to resolve upstream latest release" >&2
-            exit 1
-          fi
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${GH_TOKEN}" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/v${TAG}")
-          echo "upstream=v${TAG} prerelease=${PRE:-false} existing_release_http=${CODE}"
-          if [ "${CODE}" != "200" ] && [ "${CODE}" != "404" ]; then
-            echo "unexpected status checking existing release: ${CODE}" >&2
-            exit 1
-          fi
-          {
-            echo "tag=${TAG}"
-            echo "prerelease=${PRE:-false}"
-            if [ "${CODE}" = "404" ]; then echo "should_build=true"; else echo "should_build=false"; fi
-          } >> "$GITHUB_OUTPUT"
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bash "${GITHUB_WORKSPACE}/scripts/check-auto-build.sh" tipa
 
   build:
     needs: check
     if: ${{ needs.check.outputs.should_build == 'true' }}
     runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.check.outputs.matrix) }}
 
     steps:
       - name: Checkout this repo
@@ -72,7 +56,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ^1.25
-          cache: false  # Go 项目 clone 在 $HOME，setup-go 找不到 go.sum；统一用下面的 cache
+          cache: false
 
       - name: Setup Xcode stable
         run: |-
@@ -83,7 +67,6 @@ jobs:
         run: |
           brew install ldid
 
-      # runner 每次全新：恢复上次构建的 Go module/build 缓存与 SwiftPM checkout
       - name: Cache Go and Swift packages
         uses: actions/cache@v4
         with:
@@ -92,7 +75,7 @@ jobs:
             ~/Library/Caches/go-build
             ~/Library/Caches/org.swift.swiftpm
             ~/Library/Caches/sing-box-source-packages
-          key: ${{ runner.os }}-buildcache-${{ github.run_id }}
+          key: ${{ runner.os }}-buildcache-${{ github.run_id }}-${{ matrix.tag }}
           restore-keys: |
             ${{ runner.os }}-buildcache-
 
@@ -101,12 +84,9 @@ jobs:
           set -euo pipefail
           export SB_REPO="largerthanlife/sing-box"
           export SB_REF="${{ inputs.source_branch || 'testing' }}"
-          export MERGE_TAG="v${{ needs.check.outputs.tag }}"
-          export TAG_NAME="${{ needs.check.outputs.tag }}"
-          # 上游发版时 clients/apple 的 submodule 指针可能滞后于 libbox API（见过 beta.8 编不过），
-          # 始终改用 sing-box-for-apple 最新 main
+          export MERGE_TAG="v${{ matrix.tag }}"
+          export TAG_NAME="${{ matrix.tag }}"
           export UPDATE_APPLE="true"
-          # 固定旁加载 Bundle ID，避免 UPDATE_APPLE 后变成 sfamt 等另一套 App，装完仍打开旧 rc
           export BUNDLE_ID="io.nekohasekai.sfavt"
           export BASE_PACKAGE_IDENTIFIER="io.nekohasekai.sfavt"
           bash "${GITHUB_WORKSPACE}/scripts/build-tipa.sh"
@@ -114,9 +94,9 @@ jobs:
       - name: Create Release and Upload TIPA
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: v${{ needs.check.outputs.tag }}
-          name: ${{ needs.check.outputs.tag }}
-          prerelease: ${{ needs.check.outputs.prerelease == 'true' }}
+          tag_name: v${{ matrix.tag }}
+          name: ${{ matrix.tag }}
+          prerelease: ${{ matrix.prerelease == 'true' }}
           files: sing-box-*.tipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
