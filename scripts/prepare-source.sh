@@ -10,7 +10,7 @@
 #   UPSTREAM_CLONE_URL (可选) 完整 upstream URL（测试用），默认按 UPSTREAM_REPO 拼 GitHub URL
 #   OVERLAY_LIST   (可选) 自有文件清单路径（每行一个相对路径，# 开头为注释）
 #                         默认：本脚本同目录下的 overlay-files.txt
-#   UPDATE_APPLE   (可选) "true" 时按 overlay 目标配对 apple：分支→main，发版 tag→Bump version
+#   UPDATE_APPLE   (可选) "true" 时按 overlay 目标配对 apple：分支→默认分支(dev)，发版 tag→Bump version
 #   PREPARE_DIR    (可选) 输出目录，默认 $HOME/sing-box
 #
 # 合入策略（为何不用 git merge）：

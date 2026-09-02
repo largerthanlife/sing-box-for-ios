@@ -31,7 +31,7 @@ on:
           - 'true'
           - 'false'
       update_apple:
-        description: '拉取与 overlay 目标同代的 apple 客户端（分支→main，发版 tag→Bump version）'
+        description: '拉取与 overlay 目标同代的 apple 客户端（分支→默认分支 dev，发版 tag→Bump version）'
         required: false
         default: 'true'
         type: choice

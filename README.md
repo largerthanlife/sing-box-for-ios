@@ -8,7 +8,7 @@
 
 1. 克隆 `largerthanlife/sing-box` 的 `testing` 分支
 2. 将工作区重置为上游对应 tag 的完整文件树，再叠回 `scripts/overlay-files.txt` 列出的自有文件
-3. 用与 overlay 目标同代的 sing-box-for-apple：发版 tag 配「Bump version x.y.z」，`testing` 等分支配 apple `main`（不要拿过新的 main 去配冻结的 Libbox tag）
+3. 用与 overlay 目标同代的 sing-box-for-apple：发版 tag 配「Bump version x.y.z」，`testing` 等分支配 apple **默认分支**（当前是 `dev`，不是 `main`）
 4. 编译并在 Releases 发布产物，上游是测试版则标记为 prerelease
 
 iOS（`.tipa`）与 Android（`.apk`）各一个 workflow，**共用同一 Release tag**，缺哪边补哪边：
@@ -61,7 +61,7 @@ Actions → **Build sing-box-for-ios** → Run workflow：
 | `sing_box_ref` | fork 上带 overlay 文件的分支或 tag；留空则 `v<tag_name>` | `testing` |
 | `upstream_tag` | 上游 tag 或分支做底再叠 overlay。默认 `testing`（当前官方最新）；自动构建用 `v1.14.0` 这类发版 tag | `testing` |
 | `prerelease` | 是否发布为测试版 | `false` |
-| `update_apple` | 拉取与 overlay 目标同代的 apple 客户端（分支→`main`，发版 tag→对应 `Bump version`） | `true` |
+| `update_apple` | 拉取与 overlay 目标同代的 apple 客户端（分支→默认分支 `dev`，发版 tag→对应 `Bump version`） | `true` |
 | `run_build` / `run_build_reF1nd` | 是否编译 原版 / reF1nd 版 | `true` |
 
 改源码的流程：在 [largerthanlife/sing-box](https://github.com/largerthanlife/sing-box) 以**新增文件**方式改并 push → 若是新文件，把路径加进本仓库 `scripts/overlay-files.txt` → 手动触发或等上游发版自动出包。
@@ -74,7 +74,7 @@ App 内嵌版本号取自源码仓库的 `git describe --tags`；从分支构建
 - `scripts/overlay-files.txt`：叠到上游 tag/分支上的自有文件清单
 - `scripts/prepare-source.sh`：clone → 可选 reset 到上游 tag 或分支并 overlay → 可选按目标代际替换 apple 客户端 → 打 apple 小补丁
 - `scripts/fetch-upstream-merge.sh`：`MERGE_TAG` 先按 tag 再按分支从 SagerNet/sing-box fetch，再 `reset --hard`
-- `scripts/pair-apple.sh`：`UPDATE_APPLE=true` 时分支配 apple `main`，发版 tag 配 `Bump version <x.y.z>`，禁止用过新的 main 配冻结 tag
+- `scripts/pair-apple.sh`：`UPDATE_APPLE=true` 时分支配 apple 默认分支（`dev`），发版 tag 配 `Bump version <x.y.z>`，禁止用漂着的 dev/main 配冻结 tag
 - `scripts/apple-patches/`：tipa 构建前对 `clients/apple` 的补丁（不改 sing-box 源码）
 - `scripts/check-auto-build.sh`：自动发版前检查本仓库是否缺 tipa/apk
 - `scripts/build-tipa.sh`：环境变量驱动的完整构建（prepare-source → gomobile → xcodebuild → ldid → tipa）。会签署 Share/Action 等扩展，否则系统分享里的「Send with Taildrop」点了无反应。
