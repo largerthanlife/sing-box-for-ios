@@ -88,6 +88,7 @@ clone_paired_apple() {
     return 1
   fi
 
+  git -C "$dest" config advice.detachedHead false
   git -C "$dest" checkout --force "$sha"
   git -C "$dest" submodule update --init --recursive
   echo "apple client: $(printf '%.8s' "$sha") (Bump version ${ver})"

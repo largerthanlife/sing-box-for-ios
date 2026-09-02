@@ -38,6 +38,7 @@ check "workflow default upstream_tag=testing" \
 check "workflow default update_apple=true" \
   "$(grep -A4 'update_apple:' "$WF" | grep "default:" | head -1 | tr -d " '" | sed 's/default://')" \
   "true"
+check "version: v1.14.0" "$(apple_version_from_ref v1.14.0)" "1.14.0"
 check "version: 1.14.0" "$(apple_version_from_ref 1.14.0)" "1.14.0"
 check "version: v1.14.0-beta.8" "$(apple_version_from_ref v1.14.0-beta.8)" "1.14.0-beta.8"
 check "version: testing is empty" "$(apple_version_from_ref testing)" ""

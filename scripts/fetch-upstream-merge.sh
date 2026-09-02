@@ -17,7 +17,8 @@ fetch_upstream_merge_and_reset() {
   local merge_ref="${1:?missing merge ref}"
   MERGE_REF_KIND=""
 
-  if git fetch upstream "refs/tags/${merge_ref}:refs/tags/${merge_ref}"; then
+  if git ls-remote --exit-code upstream "refs/tags/${merge_ref}" >/dev/null 2>&1; then
+    git fetch upstream "refs/tags/${merge_ref}:refs/tags/${merge_ref}"
     echo "fetched upstream tag ${merge_ref}"
     git reset --hard "refs/tags/${merge_ref}"
     MERGE_REF_KIND=tag
@@ -26,7 +27,8 @@ fetch_upstream_merge_and_reset() {
 
   # 允许 MERGE_TAG=1.14.0（无 v 前缀）
   if [[ "$merge_ref" != v* ]] && [[ "$merge_ref" == [0-9]* ]]; then
-    if git fetch upstream "refs/tags/v${merge_ref}:refs/tags/v${merge_ref}"; then
+    if git ls-remote --exit-code upstream "refs/tags/v${merge_ref}" >/dev/null 2>&1; then
+      git fetch upstream "refs/tags/v${merge_ref}:refs/tags/v${merge_ref}"
       echo "fetched upstream tag v${merge_ref}"
       git reset --hard "refs/tags/v${merge_ref}"
       MERGE_REF_KIND=tag
@@ -35,7 +37,8 @@ fetch_upstream_merge_and_reset() {
   fi
 
   # blob:none：分支历史比单 tag 大得多；checkout 时再按需取 blob。
-  if git fetch --filter=blob:none upstream "+refs/heads/${merge_ref}:refs/remotes/upstream/${merge_ref}"; then
+  if git ls-remote --exit-code upstream "refs/heads/${merge_ref}" >/dev/null 2>&1; then
+    git fetch --filter=blob:none upstream "+refs/heads/${merge_ref}:refs/remotes/upstream/${merge_ref}"
     echo "fetched upstream branch ${merge_ref}"
     git reset --hard "refs/remotes/upstream/${merge_ref}"
     MERGE_REF_KIND=branch

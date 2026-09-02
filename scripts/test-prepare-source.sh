@@ -10,7 +10,7 @@ PASS=0
 FAIL=0
 
 APPLE_GITLINK="6a74d3b29bcc1dfb92379c3bdf748ad8e8783524"  # sing-box v1.14.0-beta.8 记录的 clients/apple 指针
-APPLE_HEAD="$(git ls-remote https://github.com/SagerNet/sing-box-for-apple.git HEAD | cut -f1)"
+APPLE_MAIN="$(git ls-remote https://github.com/SagerNet/sing-box-for-apple.git refs/heads/main | cut -f1)"
 
 check() { # <用例名> <实际> <期望>
   if [ "$2" = "$3" ]; then
@@ -55,7 +55,7 @@ check "overlay+update tag: apple 是 Bump version 1.14.0" \
   "$(git -C "$WORK/s2/clients/apple" log -1 --format=%s 2>/dev/null || true)" \
   "Bump version 1.14.0"
 check "overlay+update tag: apple 不是 floating main" \
-  "$( [ "$(git -C "$WORK/s2/clients/apple" rev-parse HEAD 2>/dev/null)" != "$APPLE_HEAD" ] && echo yes || echo no )" \
+  "$( [ "$(git -C "$WORK/s2/clients/apple" rev-parse HEAD 2>/dev/null)" != "$APPLE_MAIN" ] && echo yes || echo no )" \
   "yes"
 if [ -f "$WORK/s2/protocol/shadowsocks/method_chacha20.go" ]; then
   echo "PASS: overlay+update tag: 自有文件已叠上"
@@ -85,8 +85,8 @@ else
   echo "FAIL: overlay+update testing: prepare-source 失败"
   FAIL=$((FAIL + 1))
 fi
-check "overlay+update testing: apple == 最新 main" \
-  "$(git -C "$WORK/s2b/clients/apple" rev-parse HEAD 2>/dev/null || true)" "$APPLE_HEAD"
+check "overlay+update testing: apple == main" \
+  "$(git -C "$WORK/s2b/clients/apple" rev-parse HEAD 2>/dev/null || true)" "$APPLE_MAIN"
 check "overlay+update testing: parent is SagerNet testing" \
   "$(git -C "$WORK/s2b" rev-parse HEAD^ 2>/dev/null || true)" "$SAGERNET_TESTING"
 if [ -f "$WORK/s2b/protocol/shadowsocks/method_chacha20.go" ] && \
