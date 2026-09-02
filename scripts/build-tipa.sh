@@ -13,8 +13,8 @@
 #                      只通过 BASE_PACKAGE_IDENTIFIER 注入；切勿全局设
 #                      PRODUCT_BUNDLE_IDENTIFIER，否则所有 appex 会撞成同一个 ID 导致闪退
 #   BASE_PACKAGE_IDENTIFIER (可选) 覆盖全家桶 Bundle 前缀；不设则跟 BUNDLE_ID
-#   MARKETING_VERSION (可选) CFBundleShortVersionString，默认用 TAG_NAME
-#   CURRENT_PROJECT_VERSION (可选) CFBundleVersion；默认用 TAG_NAME 数字化，避免一直为 1
+#   MARKETING_VERSION (可选) CFBundleShortVersionString；默认从 TAG_NAME 抽出 X.Y.Z
+#   CURRENT_PROJECT_VERSION (可选) CFBundleVersion；纯版本用数字化，带后缀用时间戳
 #   OUTPUT_NAME    (可选) 产物文件名，默认 sing-box-${TAG_NAME}.tipa
 #
 # 产物写入 ${GITHUB_WORKSPACE}，兼容 macOS 自带 bash 3.2。
@@ -28,12 +28,28 @@ OUTPUT_NAME="${OUTPUT_NAME:-${APPLICATION_NAME}-${TAG_NAME}.tipa}"
 DEFAULT_BUNDLE_ID="io.nekohasekai.sfavt"
 BUNDLE_ID="${BUNDLE_ID:-$DEFAULT_BUNDLE_ID}"
 BASE_PACKAGE_IDENTIFIER="${BASE_PACKAGE_IDENTIFIER:-$BUNDLE_ID}"
-MARKETING_VERSION="${MARKETING_VERSION:-$TAG_NAME}"
+# shellcheck source=tipa-version.sh
+source "$(dirname "$0")/tipa-version.sh"
+if [ -z "${MARKETING_VERSION:-}" ]; then
+  MARKETING_VERSION="$(sanitize_marketing_version "$TAG_NAME" || true)"
+fi
+if [ -z "${MARKETING_VERSION:-}" ]; then
+  echo "refusing to package tipa: cannot derive CFBundleShortVersionString from TAG_NAME='${TAG_NAME}' (need X.Y.Z)" >&2
+  exit 1
+fi
 # CFBundleVersion 需单调变化，TrollStore/系统才愿意覆盖安装
 if [ -z "${CURRENT_PROJECT_VERSION:-}" ]; then
-  CURRENT_PROJECT_VERSION="$(printf '%s' "$TAG_NAME" | tr -cd '0-9')"
-  [ -n "$CURRENT_PROJECT_VERSION" ] || CURRENT_PROJECT_VERSION="$(date +%Y%m%d%H%M)"
+  CURRENT_PROJECT_VERSION="$(derive_project_version "$TAG_NAME")"
 fi
+# 分支底（testing）+ apple dev 是实验配对：能编过，但不保证启动稳定。
+# 发版/日常旁加载请用上游发版 tag 做底（例 v1.14.0）。
+case "${MERGE_TAG:-}" in
+  '' | v[0-9]* | [0-9]*) ;;
+  *)
+    echo "warning: MERGE_TAG=${MERGE_TAG} is a branch; tipa pairs apple default/dev and may crash on launch" >> "$SUMMARY"
+    echo "warning: MERGE_TAG=${MERGE_TAG} is a branch overlay (apple → default/dev); prefer vX.Y.Z for sideload tipa" >&2
+    ;;
+esac
 
 echo "${BUILD_LABEL:-sing-box}-v${TAG_NAME}" >> "$SUMMARY"
 echo "sing-box source: ${SB_REPO}@${SB_REF}" >> "$SUMMARY"
@@ -119,28 +135,52 @@ case "$EXT_ID" in
     ;;
 esac
 echo "bundle ids ok: app=${MAIN_ID} extension=${EXT_ID}" >> "$SUMMARY"
-ldid -SSFI/SFI.entitlements "${APP_PATH}/${APPLICATION_NAME}"
-ldid -SExtension/Extension.entitlements "${APP_PATH}/PlugIns/Extension.appex/Extension"
-ldid -SIntentsExtension/IntentsExtension.entitlements "${APP_PATH}/Extensions/IntentsExtension.appex/IntentsExtension"
+
+# shellcheck source=expand-entitlements.sh
+source "$(dirname "$0")/expand-entitlements.sh"
+ENT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tipa-ent.XXXXXX")"
+cleanup_ent() { rm -rf "$ENT_DIR"; }
+trap cleanup_ent EXIT
+
+ldid_sign() {
+  local src_ent="$1" binary="$2"
+  local expanded="$ENT_DIR/$(echo "$src_ent" | tr '/ ' '__')"
+  if [ ! -f "$binary" ]; then
+    echo "skip ldid (missing): $binary"
+    return 0
+  fi
+  expand_entitlements_file "$src_ent" "$expanded"
+  ldid -S"$expanded" "$binary"
+  echo "ldid signed: $binary (expanded $(basename "$src_ent"))"
+}
+
+ldid_sign SFI/SFI.entitlements "${APP_PATH}/${APPLICATION_NAME}"
+ldid_sign Extension/Extension.entitlements "${APP_PATH}/PlugIns/Extension.appex/Extension"
+ldid_sign IntentsExtension/IntentsExtension.entitlements \
+  "${APP_PATH}/Extensions/IntentsExtension.appex/IntentsExtension"
 
 # Taildrop / 分享相关扩展：不签的话会出现在系统分享菜单里，但点开无反应或秒退
-sign_appex() {
-  local entitlements="$1" binary="$2"
-  if [ -f "$binary" ]; then
-    ldid -S"$entitlements" "$binary"
-    echo "ldid signed: $binary"
-  else
-    echo "skip ldid (missing): $binary"
-  fi
-}
-sign_appex ShareExtension/ShareExtension.entitlements \
+ldid_sign ShareExtension/ShareExtension.entitlements \
   "${APP_PATH}/PlugIns/ShareExtension.appex/ShareExtension"
-sign_appex ActionExtension/ActionExtension.entitlements \
+ldid_sign ActionExtension/ActionExtension.entitlements \
   "${APP_PATH}/PlugIns/ActionExtension.appex/ActionExtension"
-sign_appex FileProviderExtension/FileProviderExtension.entitlements \
+ldid_sign FileProviderExtension/FileProviderExtension.entitlements \
   "${APP_PATH}/PlugIns/FileProviderExtension.appex/FileProviderExtension"
-sign_appex WidgetExtension/WidgetExtension.entitlements \
+ldid_sign WidgetExtension/WidgetExtension.entitlements \
   "${APP_PATH}/PlugIns/WidgetExtension.appex/WidgetExtension"
+
+# 装机秒退防线：签名后的主程序必须带字面量 app group，不能残留 Xcode 宏
+MAIN_BIN="${APP_PATH}/${APPLICATION_NAME}"
+EXPECT_GROUP="group.${BASE_PACKAGE_IDENTIFIER}"
+if ! grep -a -F "$EXPECT_GROUP" "$MAIN_BIN" >/dev/null; then
+  echo "refusing to package tipa: signed app missing entitlements app group ${EXPECT_GROUP}" >&2
+  exit 1
+fi
+if grep -a -F '$(APP_GROUP_IDENTIFIER)' "$MAIN_BIN" >/dev/null; then
+  echo "refusing to package tipa: signed app still contains unexpanded \$(APP_GROUP_IDENTIFIER) (ldid used raw entitlements)" >&2
+  exit 1
+fi
+echo "entitlements ok: app group ${EXPECT_GROUP}" >> "$SUMMARY"
 
 mkdir -p packages/Payload
 cp -rp "${APP_PATH}" packages/Payload
@@ -151,3 +191,5 @@ cd "${GITHUB_WORKSPACE}"
 echo -e "SHA256 Checksum: \n$(sha256sum "${OUTPUT_NAME}")" >> "$SUMMARY"
 
 rm -rf "$HOME/sing-box"
+cleanup_ent
+trap - EXIT

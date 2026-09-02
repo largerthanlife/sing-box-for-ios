@@ -59,7 +59,7 @@ Actions → **Build sing-box-for-ios** → Run workflow：
 | `tag_name` | 发布版本号（release tag 与 `.tipa` 文件名），例 `1.14.0-beta.8-custom.1` | 必填 |
 | `sing_box_repo` | sing-box 源码仓库 | `largerthanlife/sing-box` |
 | `sing_box_ref` | fork 上带 overlay 文件的分支或 tag；留空则 `v<tag_name>` | `testing` |
-| `upstream_tag` | 上游 tag 或分支做底再叠 overlay。默认 `testing`（当前官方最新）；自动构建用 `v1.14.0` 这类发版 tag | `testing` |
+| `upstream_tag` | 上游 tag 或分支做底再叠 overlay。默认 `testing`；发版自动构建用 `v1.14.0` | `testing` |
 | `prerelease` | 是否发布为测试版 | `false` |
 | `update_apple` | 拉取与 overlay 目标同代的 apple 客户端（分支→默认分支 `dev`，发版 tag→对应 `Bump version`） | `true` |
 | `run_build` / `run_build_reF1nd` | 是否编译 原版 / reF1nd 版 | `true` |
@@ -75,6 +75,8 @@ App 内嵌版本号取自源码仓库的 `git describe --tags`；从分支构建
 - `scripts/prepare-source.sh`：clone → 可选 reset 到上游 tag 或分支并 overlay → 可选按目标代际替换 apple 客户端 → 打 apple 小补丁
 - `scripts/fetch-upstream-merge.sh`：`MERGE_TAG` 先按 tag 再按分支从 SagerNet/sing-box fetch，再 `reset --hard`
 - `scripts/pair-apple.sh`：`UPDATE_APPLE=true` 时分支配 apple 默认分支（`dev`），发版 tag 配 `Bump version <x.y.z>`，禁止用漂着的 dev/main 配冻结 tag
+- `scripts/tipa-version.sh`：从 `tag_name` 抽出合法的 `CFBundleShortVersionString` / 单调 `CFBundleVersion`
+- `scripts/expand-entitlements.sh`：ldid 前把 `$(APP_GROUP_IDENTIFIER)` 等宏展开成 `group.<bundle>`；不展开会装完秒退（rc.1 之后的包踩过）
 - `scripts/apple-patches/`：tipa 构建前对 `clients/apple` 的补丁（不改 sing-box 源码）
 - `scripts/check-auto-build.sh`：自动发版前检查本仓库是否缺 tipa/apk
 - `scripts/build-tipa.sh`：环境变量驱动的完整构建（prepare-source → gomobile → xcodebuild → ldid → tipa）。会签署 Share/Action 等扩展，否则系统分享里的「Send with Taildrop」点了无反应。
@@ -84,6 +86,8 @@ App 内嵌版本号取自源码仓库的 `git describe --tags`；从分支构建
 ```bash
 bash scripts/test-resolve-source.sh
 bash scripts/test-fetch-upstream-merge.sh
+bash scripts/test-tipa-version.sh
+bash scripts/test-expand-entitlements.sh
 bash scripts/test-pair-apple.sh
 bash scripts/test-prepare-source.sh
 bash scripts/test-apple-patches.sh

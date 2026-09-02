@@ -18,7 +18,7 @@ on:
         default: 'testing'
         type: string
       upstream_tag:
-        description: '合入的上游 tag 或分支。默认 testing=当前官方最新；发版用 v1.14.0'
+        description: '合入的上游 tag 或分支。默认 testing；ldid 会展开 app group 宏，避免装完秒退'
         required: false
         default: 'testing'
         type: string

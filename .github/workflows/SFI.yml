@@ -84,9 +84,25 @@ jobs:
             ENABLE_BITCODE=NO \
             DSTROOT=packages/
 
-          ldid -SSFI/SFI.entitlements packages/Applications/$APPLICATION_NAME.app/$APPLICATION_NAME
-          ldid -SExtension/Extension.entitlements packages/Applications/$APPLICATION_NAME.app/PlugIns/Extension.appex/Extension
-          ldid -SIntentsExtension/IntentsExtension.entitlements packages/Applications/$APPLICATION_NAME.app/Extensions/IntentsExtension.appex/IntentsExtension
+          ENT_DIR=$(mktemp -d)
+          expand_one() {
+            local src="$1" dest="$ENT_DIR/$(basename "$src")"
+            # 与 scripts/expand-entitlements.sh 同语义（SFI.yml 内联，避免再 checkout scripts）
+            local base="${BASE_PACKAGE_IDENTIFIER:-io.nekohasekai.sfavt}"
+            local group="group.${base}"
+            sed -e 's/\$([Tt]eamIdentifierPrefix)//g' \
+              -e "s/\$(BASE_PACKAGE_IDENTIFIER)/${base}/g" \
+              -e "s/\$(APP_GROUP_IDENTIFIER)/${group}/g" \
+              "$src" >"$dest"
+            if grep -E '\$\([A-Za-z0-9_]+\)' "$dest" >/dev/null; then
+              echo "unexpanded macros in $dest" >&2
+              exit 1
+            fi
+            echo "$dest"
+          }
+          ldid -S"$(expand_one SFI/SFI.entitlements)" packages/Applications/$APPLICATION_NAME.app/$APPLICATION_NAME
+          ldid -S"$(expand_one Extension/Extension.entitlements)" packages/Applications/$APPLICATION_NAME.app/PlugIns/Extension.appex/Extension
+          ldid -S"$(expand_one IntentsExtension/IntentsExtension.entitlements)" packages/Applications/$APPLICATION_NAME.app/Extensions/IntentsExtension.appex/IntentsExtension
           APP_ROOT="packages/Applications/$APPLICATION_NAME.app"
           for pair in \
             "ShareExtension/ShareExtension.entitlements:PlugIns/ShareExtension.appex/ShareExtension" \
@@ -96,9 +112,10 @@ jobs:
             ENT="${pair%%:*}"
             BIN="${APP_ROOT}/${pair##*:}"
             if [ -f "$BIN" ]; then
-              ldid -S"$ENT" "$BIN"
+              ldid -S"$(expand_one "$ENT")" "$BIN"
             fi
           done
+          rm -rf "$ENT_DIR"
 
           mkdir -p packages/Payload
           cp -rp packages/Applications/$APPLICATION_NAME.app packages/Payload

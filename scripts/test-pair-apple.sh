@@ -27,7 +27,7 @@ check() {
   fi
 }
 
-# 手动 workflow 默认：不填专家参数也能 overlay 官方 testing + 配对 apple
+# 手动 workflow 默认：可追官方 testing；秒退根因是 ldid 未展开 app group 宏（另测）
 WF="$SCRIPT_DIR/../.github/workflows/sing-box-for-ios.yml"
 check "workflow default sing_box_ref=testing" \
   "$(grep -A4 'sing_box_ref:' "$WF" | grep "default:" | head -1 | tr -d " '" | sed 's/default://')" \

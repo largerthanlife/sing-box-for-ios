@@ -78,7 +78,8 @@ check "overlay+update tag: ShareView iOS15 补丁" \
     "$WORK/s2/clients/apple/ShareExtension/ShareView.swift" 2>/dev/null || echo 0)" \
   "1"
 
-# 场景 2b: 默认「build latest」—— overlay 官方 testing + apple 默认分支(dev)
+# 场景 2b: 可选「追官方 testing」—— overlay testing + apple 默认分支(dev)
+# 手动 workflow 默认应走场景 2（发版 tag 底）；testing/dev 曾导致 tipa 秒退。
 SAGERNET_TESTING="$(git ls-remote https://github.com/SagerNet/sing-box.git refs/heads/testing | awk '{print $1}')"
 if env -i PATH="$PATH" HOME="$WORK/h2b" SB_REPO=largerthanlife/sing-box SB_REF=testing \
   MERGE_TAG=testing UPDATE_APPLE=true OVERLAY_LIST="$SCRIPT_DIR/overlay-files.txt" \
