@@ -86,7 +86,7 @@ jobs:
           export SB_REF="${{ inputs.source_branch || 'testing' }}"
           export MERGE_TAG="v${{ matrix.tag }}"
           export TAG_NAME="${{ matrix.tag }}"
-          # UPDATE_APPLE 由 prepare-source 按 MERGE_TAG（发版 tag）配对 apple Bump version，不用漂着的 main
+          # UPDATE_APPLE 由 prepare-source 按 MERGE_TAG（发版 tag）配对 apple Bump version，不用漂着的 dev/main
           export UPDATE_APPLE="true"
           export BUNDLE_ID="io.nekohasekai.sfavt"
           export BASE_PACKAGE_IDENTIFIER="io.nekohasekai.sfavt"

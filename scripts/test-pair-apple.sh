@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pair-apple.sh 测试：分支→main，发版 tag→Bump version（不漂在更新的 main 上）
+# pair-apple.sh 测试：分支→默认分支(dev)，发版 tag→Bump version（不漂在 dev/main 上）
 #   bash scripts/test-pair-apple.sh
 set -uo pipefail
 
@@ -44,7 +44,7 @@ check "version: v1.14.0-beta.8" "$(apple_version_from_ref v1.14.0-beta.8)" "1.14
 check "version: testing is empty" "$(apple_version_from_ref testing)" ""
 check "version: main is empty" "$(apple_version_from_ref main)" ""
 
-# 假 apple 仓库：1.14.0 bump 之后 main 又超前一笔（模拟「main 对 frozen tag 过新」）
+# 假 apple 仓库：default=dev（含 auto redirect stub），main 上有 Bump 1.14.0 后再超前
 APPLE="$WORK/apple"
 git init -b main "$APPLE" >/dev/null
 git_ident "$APPLE"
@@ -59,6 +59,13 @@ echo too-new > "$APPLE/from-main.txt"
 git -C "$APPLE" add from-main.txt
 git -C "$APPLE" commit -m 'Record platform network path in power report' >/dev/null
 MAIN_HEAD="$(git -C "$APPLE" rev-parse HEAD)"
+git -C "$APPLE" checkout -b dev >/dev/null
+echo 'func createAutoRedirect()' > "$APPLE/ExtensionPlatformInterface.swift"
+git -C "$APPLE" add ExtensionPlatformInterface.swift
+git -C "$APPLE" commit -m 'Add stub for platform auto redirect' >/dev/null
+DEV_HEAD="$(git -C "$APPLE" rev-parse HEAD)"
+# clone 不传 -b 时用 HEAD / 默认分支
+git -C "$APPLE" symbolic-ref HEAD refs/heads/dev
 
 if APPLE_CLONE_URL="$APPLE" clone_paired_apple "$WORK/out-tag" v1.14.0 tag >/dev/null; then
   echo "PASS: clone tag v1.14.0"
@@ -91,10 +98,13 @@ else
   echo "FAIL: clone branch testing"
   FAIL=$((FAIL + 1))
 fi
-check "branch pair: HEAD is apple main" \
-  "$(git -C "$WORK/out-branch" rev-parse HEAD 2>/dev/null || true)" "$MAIN_HEAD"
-check "branch pair: 含 main 超前文件" \
-  "$(test -f "$WORK/out-branch/from-main.txt" && echo yes || echo no)" "yes"
+check "branch pair: HEAD is apple default (dev)" \
+  "$(git -C "$WORK/out-branch" rev-parse HEAD 2>/dev/null || true)" "$DEV_HEAD"
+check "branch pair: 含 auto redirect stub" \
+  "$(test -f "$WORK/out-branch/ExtensionPlatformInterface.swift" && echo yes || echo no)" "yes"
+check "branch pair: 不是 main 超前提交" \
+  "$( [ "$(git -C "$WORK/out-branch" rev-parse HEAD 2>/dev/null)" != "$MAIN_HEAD" ] && echo yes || echo no )" \
+  "yes"
 
 if APPLE_CLONE_URL="$APPLE" clone_paired_apple "$WORK/out-missing" v9.9.9 tag >/dev/null 2>&1; then
   echo "FAIL: missing bump should error (not fall back to main)"
@@ -116,17 +126,32 @@ fi
 check "fallback: HEAD is bump 1.14.0" \
   "$(git -C "$WORK/out-fallback" rev-parse HEAD 2>/dev/null || true)" "$BUMP114"
 
-# 联网：官方 apple 的 v1.14.0 应对上 Bump version 1.14.0，且不是当前 main
+# 联网：官方 apple 的 v1.14.0 应对上 Bump version 1.14.0，且不是默认分支(dev)
 APPLE_REMOTE=https://github.com/SagerNet/sing-box-for-apple.git
+LIVE_DEV="$(git ls-remote "$APPLE_REMOTE" HEAD | awk '{print $1}')"
 LIVE_MAIN="$(git ls-remote "$APPLE_REMOTE" refs/heads/main | awk '{print $1}')"
 if clone_paired_apple "$WORK/live-114" v1.14.0 tag; then
   LIVE_MSG="$(git -C "$WORK/live-114" log -1 --format=%s)"
   check "live: v1.14.0 message is Bump version 1.14.0" "$LIVE_MSG" "Bump version 1.14.0"
+  check "live: v1.14.0 is not floating default/dev" \
+    "$( [ "$(git -C "$WORK/live-114" rev-parse HEAD)" != "$LIVE_DEV" ] && echo yes || echo no )" \
+    "yes"
   check "live: v1.14.0 is not floating main" \
     "$( [ "$(git -C "$WORK/live-114" rev-parse HEAD)" != "$LIVE_MAIN" ] && echo yes || echo no )" \
     "yes"
 else
   echo "FAIL: live clone_paired_apple v1.14.0"
+  FAIL=$((FAIL + 1))
+fi
+
+if clone_paired_apple "$WORK/live-dev" testing branch; then
+  check "live: testing pairs apple default/dev" \
+    "$(git -C "$WORK/live-dev" rev-parse HEAD)" "$LIVE_DEV"
+  check "live: default branch has createAutoRedirect" \
+    "$(grep -R -l 'createAutoRedirect' "$WORK/live-dev" --include='*.swift' >/dev/null && echo yes || echo no)" \
+    "yes"
+else
+  echo "FAIL: live clone_paired_apple testing -> default branch"
   FAIL=$((FAIL + 1))
 fi
 
