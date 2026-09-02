@@ -27,14 +27,14 @@ check() {
   fi
 }
 
-# 手动 workflow 默认：不填专家参数也能 overlay 官方 testing + 配对 apple
+# 手动 workflow 默认：chacha20 overlay + 发版 tag 底（稳定 tipa，不要默认 testing/dev）
 WF="$SCRIPT_DIR/../.github/workflows/sing-box-for-ios.yml"
 check "workflow default sing_box_ref=testing" \
   "$(grep -A4 'sing_box_ref:' "$WF" | grep "default:" | head -1 | tr -d " '" | sed 's/default://')" \
   "testing"
-check "workflow default upstream_tag=testing" \
+check "workflow default upstream_tag=v1.14.0" \
   "$(grep -A4 'upstream_tag:' "$WF" | grep "default:" | head -1 | tr -d " '" | sed 's/default://')" \
-  "testing"
+  "v1.14.0"
 check "workflow default update_apple=true" \
   "$(grep -A4 'update_apple:' "$WF" | grep "default:" | head -1 | tr -d " '" | sed 's/default://')" \
   "true"

@@ -13,8 +13,8 @@
 #                      只通过 BASE_PACKAGE_IDENTIFIER 注入；切勿全局设
 #                      PRODUCT_BUNDLE_IDENTIFIER，否则所有 appex 会撞成同一个 ID 导致闪退
 #   BASE_PACKAGE_IDENTIFIER (可选) 覆盖全家桶 Bundle 前缀；不设则跟 BUNDLE_ID
-#   MARKETING_VERSION (可选) CFBundleShortVersionString，默认用 TAG_NAME
-#   CURRENT_PROJECT_VERSION (可选) CFBundleVersion；默认用 TAG_NAME 数字化，避免一直为 1
+#   MARKETING_VERSION (可选) CFBundleShortVersionString；默认从 TAG_NAME 抽出 X.Y.Z
+#   CURRENT_PROJECT_VERSION (可选) CFBundleVersion；纯版本用数字化，带后缀用时间戳
 #   OUTPUT_NAME    (可选) 产物文件名，默认 sing-box-${TAG_NAME}.tipa
 #
 # 产物写入 ${GITHUB_WORKSPACE}，兼容 macOS 自带 bash 3.2。
@@ -28,12 +28,28 @@ OUTPUT_NAME="${OUTPUT_NAME:-${APPLICATION_NAME}-${TAG_NAME}.tipa}"
 DEFAULT_BUNDLE_ID="io.nekohasekai.sfavt"
 BUNDLE_ID="${BUNDLE_ID:-$DEFAULT_BUNDLE_ID}"
 BASE_PACKAGE_IDENTIFIER="${BASE_PACKAGE_IDENTIFIER:-$BUNDLE_ID}"
-MARKETING_VERSION="${MARKETING_VERSION:-$TAG_NAME}"
+# shellcheck source=tipa-version.sh
+source "$(dirname "$0")/tipa-version.sh"
+if [ -z "${MARKETING_VERSION:-}" ]; then
+  MARKETING_VERSION="$(sanitize_marketing_version "$TAG_NAME" || true)"
+fi
+if [ -z "${MARKETING_VERSION:-}" ]; then
+  echo "refusing to package tipa: cannot derive CFBundleShortVersionString from TAG_NAME='${TAG_NAME}' (need X.Y.Z)" >&2
+  exit 1
+fi
 # CFBundleVersion 需单调变化，TrollStore/系统才愿意覆盖安装
 if [ -z "${CURRENT_PROJECT_VERSION:-}" ]; then
-  CURRENT_PROJECT_VERSION="$(printf '%s' "$TAG_NAME" | tr -cd '0-9')"
-  [ -n "$CURRENT_PROJECT_VERSION" ] || CURRENT_PROJECT_VERSION="$(date +%Y%m%d%H%M)"
+  CURRENT_PROJECT_VERSION="$(derive_project_version "$TAG_NAME")"
 fi
+# 分支底（testing）+ apple dev 是实验配对：能编过，但不保证启动稳定。
+# 发版/日常旁加载请用上游发版 tag 做底（例 v1.14.0）。
+case "${MERGE_TAG:-}" in
+  '' | v[0-9]* | [0-9]*) ;;
+  *)
+    echo "warning: MERGE_TAG=${MERGE_TAG} is a branch; tipa pairs apple default/dev and may crash on launch" >> "$SUMMARY"
+    echo "warning: MERGE_TAG=${MERGE_TAG} is a branch overlay (apple → default/dev); prefer vX.Y.Z for sideload tipa" >&2
+    ;;
+esac
 
 echo "${BUILD_LABEL:-sing-box}-v${TAG_NAME}" >> "$SUMMARY"
 echo "sing-box source: ${SB_REPO}@${SB_REF}" >> "$SUMMARY"

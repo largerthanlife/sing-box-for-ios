@@ -26,6 +26,9 @@ jobs:
       - name: Run fetch-upstream-merge tests
         run: bash scripts/test-fetch-upstream-merge.sh
 
+      - name: Run tipa-version tests
+        run: bash scripts/test-tipa-version.sh
+
       - name: Run pair-apple tests
         run: bash scripts/test-pair-apple.sh
 
