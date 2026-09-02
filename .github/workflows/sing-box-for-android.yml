@@ -18,7 +18,7 @@ on:
         default: ''
         type: string
       upstream_tag:
-        description: '可选: 上游 tag 做底再叠 overlay (例 v1.14.0-beta.17)'
+        description: '可选: 上游 tag 或分支做底再叠 overlay (例 v1.14.0 或 testing)'
         required: false
         default: ''
         type: string

@@ -13,14 +13,14 @@ on:
         default: 'largerthanlife/sing-box'
         type: string
       sing_box_ref:
-        description: 'sing-box 分支或 tag (留空则使用 v<版本号>)'
+        description: 'fork 的分支或 tag（overlay 文件从这里取；留空则 v<版本号>）'
         required: false
-        default: ''
+        default: 'testing'
         type: string
       upstream_tag:
-        description: '可选: clone 后合入的上游 tag (例 v1.14.0-beta.9)，用于在自定义分支上叠加最新上游版本'
+        description: '合入的上游 tag 或分支。默认 testing=当前官方最新；发版用 v1.14.0'
         required: false
-        default: ''
+        default: 'testing'
         type: string
       prerelease:
         description: '是否发布为测试版? (true/false)'
@@ -31,9 +31,9 @@ on:
           - 'true'
           - 'false'
       update_apple:
-        description: '是否重新拉取最新 sing-box-for-apple 仓库?'
+        description: '拉取与 overlay 目标同代的 apple 客户端（分支→main，发版 tag→Bump version）'
         required: false
-        default: 'false'
+        default: 'true'
         type: choice
         options:
           - 'true'

@@ -4,7 +4,7 @@
 # 解析本次构建使用的 sing-box 源码来源，导出三个变量：
 #   SB_REPO    GitHub 仓库 (owner/repo)，默认 largerthanlife/sing-box
 #   SB_REF     要 clone 的分支或 tag；留空时回退为 v<tag_name>
-#   MERGE_TAG  (可选) clone 后要合入的上游 tag，例 v1.14.0-beta.9
+#   MERGE_TAG  (可选) clone 后要合入的上游 tag 或分支，例 v1.14.0 或 testing
 set -euo pipefail
 
 SB_REPO="${1:-largerthanlife/sing-box}"
@@ -26,7 +26,7 @@ if [ -z "$SB_REF" ]; then
 fi
 
 if [ -n "$MERGE_TAG" ] && [[ ! "$MERGE_TAG" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-  echo "invalid merge tag: '${MERGE_TAG}'" >&2
+  echo "invalid merge ref: '${MERGE_TAG}' (expect tag or branch name)" >&2
   exit 1
 fi
 

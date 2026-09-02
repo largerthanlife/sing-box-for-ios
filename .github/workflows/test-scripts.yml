@@ -23,6 +23,12 @@ jobs:
       - name: Run resolve-source tests
         run: bash scripts/test-resolve-source.sh
 
+      - name: Run fetch-upstream-merge tests
+        run: bash scripts/test-fetch-upstream-merge.sh
+
+      - name: Run pair-apple tests
+        run: bash scripts/test-pair-apple.sh
+
       - name: Run prepare-source integration tests
         run: bash scripts/test-prepare-source.sh
 
