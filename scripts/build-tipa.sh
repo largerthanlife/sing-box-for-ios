@@ -5,9 +5,9 @@
 #   SB_REPO        (必需) sing-box 源码仓库 (owner/repo)
 #   SB_REF         (必需) 要 clone 的分支或 tag
 #   TAG_NAME       (必需) 版本号，用于 tipa 文件名
-#   MERGE_TAG      (可选) clone 后额外合入的上游 tag，例 v1.14.0-beta.9
+#   MERGE_TAG      (可选) clone 后额外合入的上游 tag 或分支，例 v1.14.0 或 testing
 #   UPSTREAM_REPO  (可选) MERGE_TAG 的来源仓库，默认 SagerNet/sing-box
-#   UPDATE_APPLE   (可选) "true" 时重新拉取最新 sing-box-for-apple
+#   UPDATE_APPLE   (可选) "true" 时按 overlay 目标配对 apple（分支→main，tag→Bump version）
 #   DISPLAY_SUFFIX (可选) CFBundleDisplayName 后缀
 #   BUNDLE_ID      (可选) 旁加载 Bundle 前缀，默认 io.nekohasekai.sfavt
 #                      只通过 BASE_PACKAGE_IDENTIFIER 注入；切勿全局设

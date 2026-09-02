@@ -2,7 +2,7 @@
 # prepare-source.sh — clone sing-box（+ 可选 overlay），并检出 Android 客户端到并列目录
 #
 # 环境变量：
-#   SB_REPO / SB_REF / MERGE_TAG / UPSTREAM_REPO / OVERLAY_LIST / PREPARE_DIR
+#   SB_REPO / SB_REF / MERGE_TAG / UPSTREAM_REPO / UPSTREAM_CLONE_URL / OVERLAY_LIST / PREPARE_DIR
 #   ANDROID_REPO   (可选) 默认 SagerNet/sing-box-for-android
 #   ANDROID_REF    (可选) 默认 dev
 #   ANDROID_DIR    (可选) 默认 $HOME/sing-box-for-android（须与 PREPARE_DIR 并列，供 build_libbox 拷贝 aar）
@@ -12,6 +12,8 @@ set -euo pipefail
 DEST="${PREPARE_DIR:-$HOME/sing-box}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 OVERLAY_LIST="${OVERLAY_LIST:-$SCRIPT_DIR/overlay-files.txt}"
+# shellcheck source=fetch-upstream-merge.sh
+source "$SCRIPT_DIR/fetch-upstream-merge.sh"
 ANDROID_REPO="${ANDROID_REPO:-SagerNet/sing-box-for-android}"
 ANDROID_REF="${ANDROID_REF:-dev}"
 ANDROID_DIR="${ANDROID_DIR:-$HOME/sing-box-for-android}"
@@ -25,11 +27,10 @@ cd "$DEST"
 if [ -n "${MERGE_TAG:-}" ]; then
   git config user.name "github-actions[bot]"
   git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-  git remote add upstream "https://github.com/${UPSTREAM_REPO:-SagerNet/sing-box}.git"
-  git fetch upstream "refs/tags/${MERGE_TAG}:refs/tags/${MERGE_TAG}"
+  git remote add upstream "${UPSTREAM_CLONE_URL:-https://github.com/${UPSTREAM_REPO:-SagerNet/sing-box}.git}"
 
   BEFORE="$(git rev-parse HEAD)"
-  git reset --hard "${MERGE_TAG}"
+  fetch_upstream_merge_and_reset "${MERGE_TAG}"
 
   if [ ! -f "$OVERLAY_LIST" ]; then
     echo "overlay list not found: $OVERLAY_LIST" >&2
