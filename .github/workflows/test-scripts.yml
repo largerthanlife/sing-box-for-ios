@@ -29,6 +29,9 @@ jobs:
       - name: Run tipa-version tests
         run: bash scripts/test-tipa-version.sh
 
+      - name: Run expand-entitlements tests
+        run: bash scripts/test-expand-entitlements.sh
+
       - name: Run pair-apple tests
         run: bash scripts/test-pair-apple.sh
 

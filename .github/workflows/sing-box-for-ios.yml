@@ -18,9 +18,9 @@ on:
         default: 'testing'
         type: string
       upstream_tag:
-        description: '合入的上游 tag 或分支。默认 v1.14.0（稳定 tipa）；填 testing 会配 apple dev，可能秒退'
+        description: '合入的上游 tag 或分支。默认 testing；ldid 会展开 app group 宏，避免装完秒退'
         required: false
-        default: 'v1.14.0'
+        default: 'testing'
         type: string
       prerelease:
         description: '是否发布为测试版? (true/false)'

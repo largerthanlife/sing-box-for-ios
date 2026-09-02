@@ -135,28 +135,52 @@ case "$EXT_ID" in
     ;;
 esac
 echo "bundle ids ok: app=${MAIN_ID} extension=${EXT_ID}" >> "$SUMMARY"
-ldid -SSFI/SFI.entitlements "${APP_PATH}/${APPLICATION_NAME}"
-ldid -SExtension/Extension.entitlements "${APP_PATH}/PlugIns/Extension.appex/Extension"
-ldid -SIntentsExtension/IntentsExtension.entitlements "${APP_PATH}/Extensions/IntentsExtension.appex/IntentsExtension"
+
+# shellcheck source=expand-entitlements.sh
+source "$(dirname "$0")/expand-entitlements.sh"
+ENT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tipa-ent.XXXXXX")"
+cleanup_ent() { rm -rf "$ENT_DIR"; }
+trap cleanup_ent EXIT
+
+ldid_sign() {
+  local src_ent="$1" binary="$2"
+  local expanded="$ENT_DIR/$(echo "$src_ent" | tr '/ ' '__')"
+  if [ ! -f "$binary" ]; then
+    echo "skip ldid (missing): $binary"
+    return 0
+  fi
+  expand_entitlements_file "$src_ent" "$expanded"
+  ldid -S"$expanded" "$binary"
+  echo "ldid signed: $binary (expanded $(basename "$src_ent"))"
+}
+
+ldid_sign SFI/SFI.entitlements "${APP_PATH}/${APPLICATION_NAME}"
+ldid_sign Extension/Extension.entitlements "${APP_PATH}/PlugIns/Extension.appex/Extension"
+ldid_sign IntentsExtension/IntentsExtension.entitlements \
+  "${APP_PATH}/Extensions/IntentsExtension.appex/IntentsExtension"
 
 # Taildrop / 分享相关扩展：不签的话会出现在系统分享菜单里，但点开无反应或秒退
-sign_appex() {
-  local entitlements="$1" binary="$2"
-  if [ -f "$binary" ]; then
-    ldid -S"$entitlements" "$binary"
-    echo "ldid signed: $binary"
-  else
-    echo "skip ldid (missing): $binary"
-  fi
-}
-sign_appex ShareExtension/ShareExtension.entitlements \
+ldid_sign ShareExtension/ShareExtension.entitlements \
   "${APP_PATH}/PlugIns/ShareExtension.appex/ShareExtension"
-sign_appex ActionExtension/ActionExtension.entitlements \
+ldid_sign ActionExtension/ActionExtension.entitlements \
   "${APP_PATH}/PlugIns/ActionExtension.appex/ActionExtension"
-sign_appex FileProviderExtension/FileProviderExtension.entitlements \
+ldid_sign FileProviderExtension/FileProviderExtension.entitlements \
   "${APP_PATH}/PlugIns/FileProviderExtension.appex/FileProviderExtension"
-sign_appex WidgetExtension/WidgetExtension.entitlements \
+ldid_sign WidgetExtension/WidgetExtension.entitlements \
   "${APP_PATH}/PlugIns/WidgetExtension.appex/WidgetExtension"
+
+# 装机秒退防线：签名后的主程序必须带字面量 app group，不能残留 Xcode 宏
+MAIN_BIN="${APP_PATH}/${APPLICATION_NAME}"
+EXPECT_GROUP="group.${BASE_PACKAGE_IDENTIFIER}"
+if ! grep -a -F "$EXPECT_GROUP" "$MAIN_BIN" >/dev/null; then
+  echo "refusing to package tipa: signed app missing entitlements app group ${EXPECT_GROUP}" >&2
+  exit 1
+fi
+if grep -a -F '$(APP_GROUP_IDENTIFIER)' "$MAIN_BIN" >/dev/null; then
+  echo "refusing to package tipa: signed app still contains unexpanded \$(APP_GROUP_IDENTIFIER) (ldid used raw entitlements)" >&2
+  exit 1
+fi
+echo "entitlements ok: app group ${EXPECT_GROUP}" >> "$SUMMARY"
 
 mkdir -p packages/Payload
 cp -rp "${APP_PATH}" packages/Payload
@@ -167,3 +191,5 @@ cd "${GITHUB_WORKSPACE}"
 echo -e "SHA256 Checksum: \n$(sha256sum "${OUTPUT_NAME}")" >> "$SUMMARY"
 
 rm -rf "$HOME/sing-box"
+cleanup_ent
+trap - EXIT
