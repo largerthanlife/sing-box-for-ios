@@ -46,3 +46,6 @@ jobs:
 
       - name: Run auto-build missing-asset check tests
         run: bash scripts/test-check-auto-build.sh
+
+      - name: Assert Android APK auto schedule stays disabled
+        run: bash scripts/test-auto-build-android-disabled.sh
