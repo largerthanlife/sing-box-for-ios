@@ -3,10 +3,14 @@ name: Auto build Android on upstream release
 # 每 6 小时检查上游最近 release：
 # - 最新上游若无 Release 或有 Release 但缺 .apk → 编 APK
 # - 已有 tipa、缺 apk 的版本会补传（解决 iOS 先建 Release 导致 Android 整段跳过）
+#
+# 暂时关闭 APK 自动产物：已去掉 schedule。恢复时取消下面 cron 注释即可。
+# 手动跑仍可用 Actions →「Auto build Android on upstream release」→ Run workflow，
+# 或「Build sing-box-for-android」。
 
 on:
-  schedule:
-    - cron: '47 */6 * * *'
+  # schedule:
+  #   - cron: '47 */6 * * *'
   workflow_dispatch:
     inputs:
       source_branch:

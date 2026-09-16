@@ -17,6 +17,8 @@ iOS（`.tipa`）与 Android（`.apk`）各一个 workflow，**共用同一 Relea
 
 也可以手动 Run workflow（可选填别的分支）。
 
+**暂时关闭 APK 自动构建**：`auto-build-android.yml` 已去掉 `schedule`（不再每 6 小时跑）。tipa 自动构建不受影响。要恢复：取消该文件里 cron 注释。临时要编 APK 仍可手动 Run「Auto build Android」或「Build sing-box-for-android」。
+
 注意：
 
 - **fork 的定时任务**需要在 Actions 页面启用过 workflow 才会运行；仓库约 60 天无活动会被 GitHub 自动暂停，回页面重新启用即可。
@@ -46,7 +48,7 @@ Actions → **Build sing-box-for-android** → Run workflow。
 
 不需要 Android 5 的 `legacy` 包；若要改 ABI / 加 universal / legacy，可在 workflow 里设环境变量 `APK_ABIS`、`APK_INCLUDE_UNIVERSAL`、`APK_INCLUDE_LEGACY`。
 
-自有 core 文件仍写在 `scripts/overlay-files.txt`。定时任务见 **Auto build on upstream release**（Android 版 workflow：`auto-build-android.yml`）。
+自有 core 文件仍写在 `scripts/overlay-files.txt`。Android 定时任务（`auto-build-android.yml`）目前已关，见上文。
 
 ---
 
@@ -92,4 +94,5 @@ bash scripts/test-pair-apple.sh
 bash scripts/test-prepare-source.sh
 bash scripts/test-apple-patches.sh
 bash scripts/test-check-auto-build.sh
+bash scripts/test-auto-build-android-disabled.sh
 ```
