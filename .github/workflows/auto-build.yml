@@ -4,10 +4,14 @@ name: Auto build on upstream release
 # - 最新上游若本仓库还没有 Release，或有 Release 但缺 .tipa → 编 tipa
 # - 再往前若干条：仅当已有 Release 缺 .tipa 时补编（不给从未跟过的老版本开新坑）
 # 与 Android workflow 共用同一 Release tag，各自补自己的产物。
+#
+# 暂时关闭 tipa 自动产物：已去掉 schedule（alpha.7+ apple UI 暂与 iOS 15 tipa 不兼容）。
+# 恢复时取消下面 cron 注释即可。手动仍可用 Actions → 本 workflow → Run workflow，
+# 或「Build sing-box-for-ios」。
 
 on:
-  schedule:
-    - cron: '23 */6 * * *'
+  # schedule:
+  #   - cron: '23 */6 * * *'
   workflow_dispatch:
     inputs:
       source_branch:

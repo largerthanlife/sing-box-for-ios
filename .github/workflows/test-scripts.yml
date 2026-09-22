@@ -49,3 +49,6 @@ jobs:
 
       - name: Assert Android APK auto schedule stays disabled
         run: bash scripts/test-auto-build-android-disabled.sh
+
+      - name: Assert tipa auto schedule stays disabled
+        run: bash scripts/test-auto-build-tipa-disabled.sh

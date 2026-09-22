@@ -17,7 +17,11 @@ iOS（`.tipa`）与 Android（`.apk`）各一个 workflow，**共用同一 Relea
 
 也可以手动 Run workflow（可选填别的分支）。
 
-**暂时关闭 APK 自动构建**：`auto-build-android.yml` 已去掉 `schedule`（不再每 6 小时跑）。tipa 自动构建不受影响。要恢复：取消该文件里 cron 注释。临时要编 APK 仍可手动 Run「Auto build Android」或「Build sing-box-for-android」。
+**暂时关闭 tipa / APK 自动构建**：
+- `auto-build.yml`（tipa）与 `auto-build-android.yml`（apk）均已去掉 `schedule`
+- 原因：alpha.7+ apple UI 暂与 iOS 15 tipa 编不过；APK 亦暂不需要
+- 恢复：取消对应文件里 cron 注释
+- 临时要编：Actions 手动 Run「Auto build on upstream release」/「Build sing-box-for-ios」，或 Android 对应 workflow
 
 注意：
 
