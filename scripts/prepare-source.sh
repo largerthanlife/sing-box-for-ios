@@ -82,7 +82,7 @@ if [ "${UPDATE_APPLE:-false}" = "true" ]; then
   nearest_tag=""
   commits_ahead=9999
   if [ -z "${MERGE_TAG:-}" ]; then
-    nearest_tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+    nearest_tag="$(nearest_version_tag || true)"
     if [ -n "$nearest_tag" ]; then
       commits_ahead="$(git rev-list --count "${nearest_tag}..HEAD" 2>/dev/null || echo 9999)"
     fi

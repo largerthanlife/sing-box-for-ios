@@ -12,6 +12,9 @@
 #   clone_paired_apple <dest> <pair_ref> [kind]
 #     kind=tag|branch；省略则从 pair_ref 形态推断
 #   APPLE_CLONE_URL / APPLE_REPO  可覆盖（测试用）
+#   APPLE_BUMP_ORPHANS            分支上已经找不到的 Bump version，仍可按 SHA 取回
+
+PAIR_APPLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 apple_version_from_ref() {
   local ref="${1:-}"
@@ -55,6 +58,29 @@ choose_apple_pair() {
   printf '%s|\n' "$sb_ref"
 }
 
+# nearest_version_tag
+# 在当前 sing-box 检出里找最近的 vX.Y.Z tag。fork 经常只有旧 tag
+# （例如停在 v1.9），describe 会落到很远的祖先上，自定义分支就被当成
+# 普通分支去配 apple dev。本地没有够近的发版 tag 时，从上游补 tag 再试一次。
+nearest_version_tag() {
+  local nearest ahead url
+  nearest="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+  ahead=9999
+  if [ -n "$nearest" ]; then
+    ahead="$(git rev-list --count "${nearest}..HEAD" 2>/dev/null || echo 9999)"
+  fi
+  if [ -n "$(apple_version_from_ref "$nearest")" ] && [ "$ahead" -le 20 ] 2>/dev/null; then
+    printf '%s\n' "$nearest"
+    return 0
+  fi
+  url="${UPSTREAM_CLONE_URL:-https://github.com/${UPSTREAM_REPO:-SagerNet/sing-box}.git}"
+  git fetch --tags "$url" >/dev/null 2>&1 || true
+  nearest="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+  if [ -n "$(apple_version_from_ref "$nearest")" ]; then
+    printf '%s\n' "$nearest"
+  fi
+}
+
 _apple_clone_url() {
   printf '%s\n' "${APPLE_CLONE_URL:-https://github.com/${APPLE_REPO:-SagerNet/sing-box-for-apple}.git}"
 }
@@ -62,6 +88,30 @@ _apple_clone_url() {
 find_apple_bump_commit() {
   local repo_dir="${1:?}" version="${2:?}"
   git -C "$repo_dir" log --all --format=%H --grep="^Bump version ${version}$" -n 1
+}
+
+# 1.15.0-alpha.6 的 Bump 提交后来被 rebase 出所有分支，git log 找不到，
+# 但对象还在，按完整 SHA fetch 仍能取回。文件里写 version sha，取回后核对提交说明。
+fetch_orphan_bump() {
+  local dest="${1:?}" version="${2:?}"
+  local file="${APPLE_BUMP_ORPHANS:-$PAIR_APPLE_DIR/apple-bump-orphans.txt}"
+  local line ver sha msg
+  [ -f "$file" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in '' | \#*) continue ;; esac
+    ver="${line%% *}"
+    sha="${line#* }"
+    if [ "$ver" = "$version" ]; then
+      git -C "$dest" fetch origin "$sha"
+      msg="$(git -C "$dest" log -1 --format=%s "$sha")"
+      if [ "$msg" != "Bump version ${version}" ]; then
+        echo "orphan bump ${sha} message is '${msg}', want 'Bump version ${version}'" >&2
+        return 1
+      fi
+      printf '%s\n' "$sha"
+      return 0
+    fi
+  done < "$file"
 }
 
 clone_paired_apple() {
@@ -104,6 +154,9 @@ clone_paired_apple() {
 
   local sha=""
   sha="$(find_apple_bump_commit "$dest" "$ver")"
+  if [ -z "$sha" ]; then
+    sha="$(fetch_orphan_bump "$dest" "$ver")"
+  fi
   if [ -z "$sha" ] && [ -n "${TAG_NAME:-}" ]; then
     local fallback
     fallback="$(apple_version_from_ref "$TAG_NAME")"
