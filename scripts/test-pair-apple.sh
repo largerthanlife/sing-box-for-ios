@@ -44,6 +44,18 @@ check "version: 1.14.0" "$(apple_version_from_ref 1.14.0)" "1.14.0"
 check "version: v1.14.0-beta.8" "$(apple_version_from_ref v1.14.0-beta.8)" "1.14.0-beta.8"
 check "version: testing is empty" "$(apple_version_from_ref testing)" ""
 check "version: main is empty" "$(apple_version_from_ref main)" ""
+check "pair: reality branch one commit after alpha.6" \
+  "$(choose_apple_pair cursor/reality-mlkem-alpha6-5e10 "" "" v1.15.0-alpha.6 1)" \
+  "v1.15.0-alpha.6|tag"
+check "pair: testing stays on branch even near a tag" \
+  "$(choose_apple_pair testing "" "" v1.15.0-alpha.6 1)" \
+  "testing|"
+check "pair: explicit merge tag wins" \
+  "$(choose_apple_pair testing v1.15.0-alpha.6 tag v1.14.0 1)" \
+  "v1.15.0-alpha.6|tag"
+check "pair: far-ahead custom branch does not snap to old tag" \
+  "$(choose_apple_pair cursor/some-branch "" "" v1.15.0-alpha.6 40)" \
+  "cursor/some-branch|"
 
 # 假 apple 仓库：default=dev（含 auto redirect stub），main 上有 Bump 1.14.0 后再超前
 APPLE="$WORK/apple"

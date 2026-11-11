@@ -25,6 +25,36 @@ apple_version_from_ref() {
   esac
 }
 
+# choose_apple_pair <sb_ref> <merge_tag> <merge_kind> <nearest_tag> <commits_ahead>
+# 打印 pair_ref|pair_kind。
+# 有 MERGE_TAG 时沿用它。testing/dev/main 配 apple 默认分支。
+# 自定义分支若只比某个发版 tag 超前不超过 20 个提交，配该 tag 的
+# 「Bump version」客户端。alpha.6 成功的 tipa 用的就是这个客户端，
+# 不是 sing-box 仓库里钉住的 submodule。
+choose_apple_pair() {
+  local sb_ref="${1:-}"
+  local merge_tag="${2:-}"
+  local merge_kind="${3:-}"
+  local nearest="${4:-}"
+  local ahead="${5:-9999}"
+
+  if [ -n "$merge_tag" ]; then
+    printf '%s|%s\n' "$merge_tag" "$merge_kind"
+    return 0
+  fi
+  case "$sb_ref" in
+    testing|dev|main)
+      printf '%s|\n' "$sb_ref"
+      return 0
+      ;;
+  esac
+  if [ -n "$(apple_version_from_ref "$nearest")" ] && [ "$ahead" -le 20 ] 2>/dev/null; then
+    printf '%s|tag\n' "$nearest"
+    return 0
+  fi
+  printf '%s|\n' "$sb_ref"
+}
+
 _apple_clone_url() {
   printf '%s\n' "${APPLE_CLONE_URL:-https://github.com/${APPLE_REPO:-SagerNet/sing-box-for-apple}.git}"
 }
