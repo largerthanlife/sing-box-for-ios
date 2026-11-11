@@ -55,6 +55,29 @@ choose_apple_pair() {
   printf '%s|\n' "$sb_ref"
 }
 
+# nearest_version_tag
+# 在当前 sing-box 检出里找最近的 vX.Y.Z tag。fork 经常只有旧 tag
+# （例如停在 v1.9），describe 会落到很远的祖先上，自定义分支就被当成
+# 普通分支去配 apple dev。本地没有够近的发版 tag 时，从上游补 tag 再试一次。
+nearest_version_tag() {
+  local nearest ahead url
+  nearest="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+  ahead=9999
+  if [ -n "$nearest" ]; then
+    ahead="$(git rev-list --count "${nearest}..HEAD" 2>/dev/null || echo 9999)"
+  fi
+  if [ -n "$(apple_version_from_ref "$nearest")" ] && [ "$ahead" -le 20 ] 2>/dev/null; then
+    printf '%s\n' "$nearest"
+    return 0
+  fi
+  url="${UPSTREAM_CLONE_URL:-https://github.com/${UPSTREAM_REPO:-SagerNet/sing-box}.git}"
+  git fetch --tags "$url" >/dev/null 2>&1 || true
+  nearest="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+  if [ -n "$(apple_version_from_ref "$nearest")" ]; then
+    printf '%s\n' "$nearest"
+  fi
+}
+
 _apple_clone_url() {
   printf '%s\n' "${APPLE_CLONE_URL:-https://github.com/${APPLE_REPO:-SagerNet/sing-box-for-apple}.git}"
 }

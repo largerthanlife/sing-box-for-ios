@@ -57,6 +57,36 @@ check "pair: far-ahead custom branch does not snap to old tag" \
   "$(choose_apple_pair cursor/some-branch "" "" v1.15.0-alpha.6 40)" \
   "cursor/some-branch|"
 
+# fork 只有旧 tag 时，要从上游把 v1.15.0-alpha.6 取回来
+UPSTREAM="$WORK/upstream-sing"
+git init -b main "$UPSTREAM" >/dev/null
+git_ident "$UPSTREAM"
+echo base > "$UPSTREAM/f"
+git -C "$UPSTREAM" add f
+git -C "$UPSTREAM" commit -m base >/dev/null
+git -C "$UPSTREAM" tag v1.9.7
+i=0
+while [ "$i" -lt 25 ]; do
+  echo "$i" >> "$UPSTREAM/f"
+  git -C "$UPSTREAM" commit -am "gap $i" >/dev/null
+  i=$((i + 1))
+done
+echo alpha > "$UPSTREAM/f"
+git -C "$UPSTREAM" commit -am 'alpha.6' >/dev/null
+git -C "$UPSTREAM" tag v1.15.0-alpha.6
+echo fix > "$UPSTREAM/f"
+git -C "$UPSTREAM" commit -am 'reality' >/dev/null
+FORK="$WORK/fork-sing"
+git clone --no-tags "$UPSTREAM" "$FORK" >/dev/null
+git_ident "$FORK"
+git -C "$FORK" tag v1.9.7 "$(git -C "$UPSTREAM" rev-parse v1.9.7)"
+check "nearest tag: fork only has v1.9.7 until upstream fetch" \
+  "$(git -C "$FORK" describe --tags --abbrev=0)" \
+  "v1.9.7"
+check "nearest tag: fetch upstream finds alpha.6" \
+  "$(cd "$FORK" && UPSTREAM_CLONE_URL="$UPSTREAM" nearest_version_tag)" \
+  "v1.15.0-alpha.6"
+
 # 假 apple 仓库：default=dev（含 auto redirect stub），main 上有 Bump 1.14.0 后再超前
 APPLE="$WORK/apple"
 git init -b main "$APPLE" >/dev/null
