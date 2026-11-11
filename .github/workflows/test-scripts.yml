@@ -52,3 +52,6 @@ jobs:
 
       - name: Assert blank upstream_tag does not default to testing
         run: bash scripts/test-upstream-tag-default.sh
+
+      - name: Assert tipa locks Swift package versions
+        run: bash scripts/test-tipa-package-pin.sh
