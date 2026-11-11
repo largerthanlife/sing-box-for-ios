@@ -49,3 +49,6 @@ jobs:
 
       - name: Assert Android APK auto schedule stays disabled
         run: bash scripts/test-auto-build-android-disabled.sh
+
+      - name: Assert blank upstream_tag does not default to testing
+        run: bash scripts/test-upstream-tag-default.sh
