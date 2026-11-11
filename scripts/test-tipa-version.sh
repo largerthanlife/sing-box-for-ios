@@ -33,11 +33,11 @@ check "project: v-prefix" "$(derive_project_version v1.14.0)" "1140"
 check "project: suffix uses stamp" "$(derive_project_version 1.14.0-testing 202609021530)" "202609021530"
 check "project: rc uses stamp" "$(derive_project_version 1.14.0-rc.5 202608301200)" "202608301200"
 
-# workflow upstream_tag 默认可为 testing（崩溃根因是 entitlements 宏，另有 expand 测试）
+# 留空 upstream_tag 表示直接编译 sing_box_ref，不回落到 testing
 WF="$SCRIPT_DIR/../.github/workflows/sing-box-for-ios.yml"
-check "workflow default upstream_tag is set" \
+check "workflow default upstream_tag is empty" \
   "$(grep -A4 'upstream_tag:' "$WF" | grep "default:" | head -1 | tr -d " '" | sed 's/default://' | grep -E '.+' >/dev/null && echo yes || echo no)" \
-  "yes"
+  "no"
 
 echo
 echo "tipa-version: ${PASS} passed, ${FAIL} failed"

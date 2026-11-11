@@ -105,11 +105,11 @@ else
   PASS=$((PASS + 1))
 fi
 
-# 最新 tipa 默认可追 testing；崩溃根因是 entitlements 宏未展开
+# 崩溃根因是 entitlements 宏未展开；upstream_tag 留空表示不合入
 WF="$SCRIPT_DIR/../.github/workflows/sing-box-for-ios.yml"
-check "workflow default upstream_tag=testing" \
+check "workflow default upstream_tag is empty" \
   "$(grep -A4 'upstream_tag:' "$WF" | grep "default:" | head -1 | tr -d " '" | sed 's/default://')" \
-  "testing"
+  ""
 
 echo
 echo "expand-entitlements: ${PASS} passed, ${FAIL} failed"

@@ -18,9 +18,9 @@ on:
         default: 'testing'
         type: string
       upstream_tag:
-        description: '合入的上游 tag 或分支。默认 testing；ldid 会展开 app group 宏，避免装完秒退'
+        description: '合入的上游 tag 或分支。留空表示直接编译 sing_box_ref，不合入。需要把自有文件叠到上游树上时再填，例如 testing'
         required: false
-        default: 'testing'
+        default: ''
         type: string
       prerelease:
         description: '是否发布为测试版? (true/false)'
