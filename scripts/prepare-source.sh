@@ -79,7 +79,21 @@ if [ -n "${MERGE_TAG:-}" ]; then
 fi
 
 if [ "${UPDATE_APPLE:-false}" = "true" ]; then
-  clone_paired_apple clients/apple "${MERGE_TAG:-$SB_REF}" "${MERGE_REF_KIND:-}"
+  nearest_tag=""
+  commits_ahead=9999
+  if [ -z "${MERGE_TAG:-}" ]; then
+    nearest_tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+    if [ -n "$nearest_tag" ]; then
+      commits_ahead="$(git rev-list --count "${nearest_tag}..HEAD" 2>/dev/null || echo 9999)"
+    fi
+  fi
+  pair_spec="$(choose_apple_pair "$SB_REF" "${MERGE_TAG:-}" "${MERGE_REF_KIND:-}" "$nearest_tag" "$commits_ahead")"
+  pair_ref="${pair_spec%%|*}"
+  pair_kind="${pair_spec#*|}"
+  if [ "$pair_kind" = "tag" ] && [ -z "${MERGE_TAG:-}" ]; then
+    echo "apple pair: ${SB_REF} is ${commits_ahead} commit(s) after ${pair_ref}; using that release's apple client"
+  fi
+  clone_paired_apple clients/apple "$pair_ref" "$pair_kind"
 fi
 
 # Apple 客户端小补丁（不改 sing-box 源码树；在 tipa 构建前打到 clients/apple）
