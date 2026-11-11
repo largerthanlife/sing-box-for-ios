@@ -97,6 +97,12 @@ XCODE_EXTRA[${#XCODE_EXTRA[@]}]="BASE_PACKAGE_IDENTIFIER=${BASE_PACKAGE_IDENTIFI
 XCODE_EXTRA[${#XCODE_EXTRA[@]}]="MARKETING_VERSION=${MARKETING_VERSION}"
 XCODE_EXTRA[${#XCODE_EXTRA[@]}]="CURRENT_PROJECT_VERSION=${CURRENT_PROJECT_VERSION}"
 
+# upToNextMajor 会把 libghostty-spm 浮到 1.6，并带上改名后的 DisplayLink 3.0.1。
+# Xcode 26.6 登记这些包时数组比 index set 多 1，xcodebuild 直接 abort（退出码 134）。
+# 锁住客户端仓库里提交的 Package.resolved（ghostty 1.4.0 + MSDisplayLink 2.2.0）。
+# 同时丢掉可能已缓存的浮动 checkout，否则 -clonedSourcePackagesDirPath 会沿用旧树。
+rm -rf "$HOME/Library/Caches/sing-box-source-packages" "$HOME/Library/Caches/org.swift.swiftpm"
+
 xcodebuild \
   -project sing-box.xcodeproj \
   -scheme SFI \
@@ -105,6 +111,7 @@ xcodebuild \
   -sdk iphoneos \
   -derivedDataPath DerivedData \
   -clonedSourcePackagesDirPath "$HOME/Library/Caches/sing-box-source-packages" \
+  -onlyUsePackageVersionsFromResolvedFile \
   build \
   STRIP_INSTALLED_PRODUCT=NO \
   ARCHS=arm64 \
