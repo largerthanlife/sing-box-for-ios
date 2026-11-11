@@ -157,6 +157,33 @@ else
   PASS=$((PASS + 1))
 fi
 
+# Bump 提交不在任何分支上时，按 SHA 取回，并核对提交说明
+ORPHAN_SRC="$WORK/orphan-src"
+git init -b main "$ORPHAN_SRC" >/dev/null
+git_ident "$ORPHAN_SRC"
+echo base > "$ORPHAN_SRC/version.txt"
+git -C "$ORPHAN_SRC" add version.txt
+git -C "$ORPHAN_SRC" commit -m base >/dev/null
+echo 987 > "$ORPHAN_SRC/version.txt"
+git -C "$ORPHAN_SRC" commit -am 'Bump version 9.8.7' >/dev/null
+ORPHAN_SHA="$(git -C "$ORPHAN_SRC" rev-parse HEAD)"
+git -C "$ORPHAN_SRC" reset --hard HEAD~1 >/dev/null
+git -C "$ORPHAN_SRC" config uploadpack.allowAnySHA1InWant true
+printf '9.8.7 %s\n' "$ORPHAN_SHA" > "$WORK/orphans.txt"
+if APPLE_CLONE_URL="$ORPHAN_SRC" APPLE_BUMP_ORPHANS="$WORK/orphans.txt" \
+    clone_paired_apple "$WORK/out-orphan" v9.8.7 tag >/dev/null; then
+  echo "PASS: orphan bump fetched by SHA"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: orphan bump fetched by SHA"
+  FAIL=$((FAIL + 1))
+fi
+check "orphan bump: HEAD is the dangling commit" \
+  "$(git -C "$WORK/out-orphan" rev-parse HEAD 2>/dev/null || true)" "$ORPHAN_SHA"
+check "orphan bump: message" \
+  "$(git -C "$WORK/out-orphan" log -1 --format=%s 2>/dev/null || true)" \
+  "Bump version 9.8.7"
+
 # TAG_NAME fallback（reF1nd 的 SB_REF=v1.14.0-reF1nd）
 if TAG_NAME=1.14.0 APPLE_CLONE_URL="$APPLE" \
     clone_paired_apple "$WORK/out-fallback" v1.14.0-reF1nd tag >/dev/null; then
@@ -184,6 +211,27 @@ if clone_paired_apple "$WORK/live-114" v1.14.0 tag; then
     "yes"
 else
   echo "FAIL: live clone_paired_apple v1.14.0"
+  FAIL=$((FAIL + 1))
+fi
+
+# 1.15.0-alpha.6 的 Bump 已被 rebase 出全部分支，只能按记录的 SHA 取回
+if clone_paired_apple "$WORK/live-a6" v1.15.0-alpha.6 tag; then
+  check "live: alpha.6 message is Bump version 1.15.0-alpha.6" \
+    "$(git -C "$WORK/live-a6" log -1 --format=%s)" "Bump version 1.15.0-alpha.6"
+  check "live: alpha.6 sha" \
+    "$(git -C "$WORK/live-a6" rev-parse HEAD)" "511571f13cec0989b68c7ec72f31310b87dc0e89"
+  A6_RESOLVED="$WORK/live-a6/sing-box.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+  check "live: alpha.6 pins ghostty 1.5.20260906" \
+    "$(grep -c '733ae3b29d447b6707cbfc00879027a076dfd0eb' "$A6_RESOLVED")" "1"
+  check "live: alpha.6 pins MSDisplayLink 2.2.0" \
+    "$(grep -c '87eb0af130744c8cbe2e31b6e1a5bcd659f1c220' "$A6_RESOLVED")" "1"
+  check "live: alpha.6 does not pin DisplayLink 3" \
+    "$(grep -c 'github.com/Lakr233/DisplayLink.git' "$A6_RESOLVED")" "0"
+  check "live: alpha.6 has createAutoRedirect" \
+    "$(grep -R -l 'createAutoRedirect' "$WORK/live-a6" --include='*.swift' >/dev/null && echo yes || echo no)" \
+    "yes"
+else
+  echo "FAIL: live clone_paired_apple v1.15.0-alpha.6"
   FAIL=$((FAIL + 1))
 fi
 

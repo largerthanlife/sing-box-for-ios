@@ -12,6 +12,9 @@
 #   clone_paired_apple <dest> <pair_ref> [kind]
 #     kind=tag|branch；省略则从 pair_ref 形态推断
 #   APPLE_CLONE_URL / APPLE_REPO  可覆盖（测试用）
+#   APPLE_BUMP_ORPHANS            分支上已经找不到的 Bump version，仍可按 SHA 取回
+
+PAIR_APPLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 apple_version_from_ref() {
   local ref="${1:-}"
@@ -87,6 +90,30 @@ find_apple_bump_commit() {
   git -C "$repo_dir" log --all --format=%H --grep="^Bump version ${version}$" -n 1
 }
 
+# 1.15.0-alpha.6 的 Bump 提交后来被 rebase 出所有分支，git log 找不到，
+# 但对象还在，按完整 SHA fetch 仍能取回。文件里写 version sha，取回后核对提交说明。
+fetch_orphan_bump() {
+  local dest="${1:?}" version="${2:?}"
+  local file="${APPLE_BUMP_ORPHANS:-$PAIR_APPLE_DIR/apple-bump-orphans.txt}"
+  local line ver sha msg
+  [ -f "$file" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in '' | \#*) continue ;; esac
+    ver="${line%% *}"
+    sha="${line#* }"
+    if [ "$ver" = "$version" ]; then
+      git -C "$dest" fetch origin "$sha"
+      msg="$(git -C "$dest" log -1 --format=%s "$sha")"
+      if [ "$msg" != "Bump version ${version}" ]; then
+        echo "orphan bump ${sha} message is '${msg}', want 'Bump version ${version}'" >&2
+        return 1
+      fi
+      printf '%s\n' "$sha"
+      return 0
+    fi
+  done < "$file"
+}
+
 clone_paired_apple() {
   local dest="${1:?missing apple dest}"
   local pair_ref="${2:-}"
@@ -127,6 +154,9 @@ clone_paired_apple() {
 
   local sha=""
   sha="$(find_apple_bump_commit "$dest" "$ver")"
+  if [ -z "$sha" ]; then
+    sha="$(fetch_orphan_bump "$dest" "$ver")"
+  fi
   if [ -z "$sha" ] && [ -n "${TAG_NAME:-}" ]; then
     local fallback
     fallback="$(apple_version_from_ref "$TAG_NAME")"

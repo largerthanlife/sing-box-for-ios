@@ -1,0 +1,3 @@
+# Bump version 提交已经不在任何分支上，但 GitHub 仍按 SHA 提供对象。
+# 格式：版本号 完整 SHA。取回后必须核对提交说明正好是「Bump version <版本号>」。
+1.15.0-alpha.6 511571f13cec0989b68c7ec72f31310b87dc0e89
